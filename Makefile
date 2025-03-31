@@ -1,7 +1,6 @@
 CC = cc
 AR = ar
 
-# Set to 0 originally, set to 1 in the zip file
 RUNCODES_ENV = 0
 
 SRC = 
@@ -22,7 +21,6 @@ zip: $(ZIP)
 clean:
 	rm -f $(OBJ) $(EXTRA_OBJ) $(GEN) $(EXE) $(ZIP)
 
-# This is very cursed
 $(ZIP): $(SRC) Makefile
 	sed -i 's/^RUNCODES_ENV = 0$$/RUNCODES_ENV = 1/' Makefile
 	zip -r $@ . -i $^
