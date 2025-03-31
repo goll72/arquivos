@@ -25,7 +25,7 @@ clean:
 # This is very cursed
 $(ZIP): $(SRC) Makefile
 	sed -i 's/^RUNCODES_ENV = 0$$/RUNCODES_ENV = 1/' Makefile
-	zip -r $@ . -i $(SRC) Makefile
+	zip -r $@ . -i $^
 	sed -i 's/^RUNCODES_ENV = 1$$/RUNCODES_ENV = 0/' Makefile
 
 ifeq ($(RUNCODES_ENV),0)
