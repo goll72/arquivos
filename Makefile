@@ -1,15 +1,13 @@
 CC = cc
-AR = ar
 
-RUNCODES_ENV = 0
-
-SRC = 
+SRC = main.c
 OBJ = $(SRC:.c=.o)
+DEP = $(OBJ:.o=.d)
 EXE = arquivos
 ZIP = ../arquivos.zip
 
-BASECFLAGS = -O2 -DRUNCODES_ENV=$(RUNCODES_ENV) $(CFLAGS)
-BASELDFLAGS = -L. -lmd $(LDFLAGS)
+BASECFLAGS = -O2 -MMD $(CFLAGS)
+BASELDFLAGS = $(LDFLAGS)
 
 all: $(EXE)
 
@@ -19,22 +17,10 @@ run: $(EXE)
 zip: $(ZIP)
 
 clean:
-	rm -f $(OBJ) $(EXTRA_OBJ) $(GEN) $(EXE) $(ZIP)
+	rm -f $(OBJ) $(DEP) $(EXE) $(ZIP)
 
 $(ZIP): $(SRC) Makefile
-	sed -i 's/^RUNCODES_ENV = 0$$/RUNCODES_ENV = 1/' Makefile
 	zip -r $@ . -i $^
-	sed -i 's/^RUNCODES_ENV = 1$$/RUNCODES_ENV = 0/' Makefile
-
-ifeq ($(RUNCODES_ENV),0)
-EXTRA_SRC = md.c
-EXTRA_OBJ = $(EXTRA_SRC:.c=.o)
-
-GEN += libmd.a
-
-libmd.a: md.o
-	$(AR) r $@ $<
-endif
 
 $(EXE): $(OBJ) $(GEN)
 	$(CC) $(BASECFLAGS) $(OBJ) $(BASELDFLAGS) -o $@
