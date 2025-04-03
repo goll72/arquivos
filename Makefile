@@ -6,7 +6,7 @@ DEP = $(OBJ:.o=.d)
 EXE = arquivos
 ZIP = ../arquivos.zip
 
-BASECFLAGS = -O2 -MMD $(CFLAGS)
+BASECFLAGS = -O2 -MMD -std=gnu99 $(CFLAGS)
 BASELDFLAGS = $(LDFLAGS)
 
 all: $(EXE)
