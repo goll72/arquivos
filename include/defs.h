@@ -63,6 +63,7 @@
 
 /* Define a X macro que define os campos da struct */
 #define X(T, name, ...) typeof(T) name;
+#define Y(T, name)
 
 typedef struct {
     HEADER_REG_FIELDS(X)
@@ -72,6 +73,29 @@ typedef struct {
     DATA_REG_FIELDS(X, X)
 } f_data_reg_t;
 
+/**
+ * Tipos "packed"/"empacotados", sem espaçamento
+ * entre os campos na sua representação. Não podem
+ * ser usados de forma portátil para armazenar dados
+ * na memória principal, mas permitem o cálculo de
+ * offsets no arquivo em tempo de compilação, usando
+ * a macro `offsetof`, uma vez que possuem a mesma
+ * representação de um registro salvo no arquivo.
+ *
+ * (não é possível obter o offset de campos de tamanho variável)
+ */
+#define PACKED(T) packed_##T
+
+typedef struct {
+    HEADER_REG_FIELDS(X)
+} __attribute__((packed)) PACKED(f_header_t);
+
+/* Apenas os campos de tamanho fixo */
+typedef struct {
+    DATA_REG_FIELDS(X, Y)
+} __attribute__((packed)) PACKED(f_data_reg_t);
+
 #undef X
+#undef Y
 
 #endif /* DEFS_H */
