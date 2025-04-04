@@ -27,7 +27,7 @@ clean:
 	rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
 	! [ -d $(BUILD) ] || find $(BUILD) -type d -delete
 
-include $(DEP)
+-include $(DEP)
 
 $(BUILD)/:
 	mkdir -p $@
