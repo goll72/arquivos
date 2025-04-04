@@ -60,14 +60,18 @@ static char *file_read_var_field(FILE *f)
 
     long current = ftell(f);
 
-    /* Tamanho da string, contando com o delimitador */
+    // Tamanho da string, contando com o delimitador
     size_t len = current - initial + 1;
     char *data = malloc(len);
 
     if (!data)
         return NULL;
 
-    fread(data, 1, len - 1, f);
+    fseek(f, initial, SEEK_SET);
+
+    // Também queremos ler o delimitador, mesmo
+    // que ele seja imediatamente sobrescrito
+    fread(data, 1, len, f);
     data[len - 1] = '\0';
 
     return data;
