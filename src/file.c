@@ -14,6 +14,8 @@
         float: "%2$.*1$s: %4$.2f\n", \
         uint32_t: "%2$.*1$s: %4$" PRIu32 "\n")
 
+#define OPT(x) _Generic(x, char *: "NADA CONSTA", default: x)
+
 bool file_init(FILE *f)
 {
 #define X(_, name, default) .name = default,
@@ -86,11 +88,10 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
     long current = ftell(f);
 
-    // Tamanho da string, considerando o
-    // delimitador, porém ignorando o código
+    // Tamanho da string, incluindo o delimitador e ignorando o código
     //
-    // NOTE: o byte na posição atual do arquivo
-    // não foi lido, logo, devemos subtrair 1
+    // NOTE: o byte na posição atual do arquivo não foi lido
+    // (não faz parte do campo), logo, devemos subtrair 1
     size_t len = current - initial - 1;
 
     if (len > *rem_size) {
@@ -111,7 +112,7 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     fread(data, 1, len, f);
     data[len - 1] = '\0';
 
-    // Inclui o código
+    // Inclui o código no cálculo do tamanho restante do registro
     *rem_size -= len + 1;
 
     return data;
@@ -186,7 +187,7 @@ void file_print_data_reg(const f_header_t *header, const f_data_reg_t *reg)
 #define X(_, name)
 #define Y(_, name)                                                               \
     printf(FMT(reg->name), (int)sizeof header->name##_desc, header->name##_desc, \
-        (int)sizeof reg->name, reg->name);
+        (int)sizeof reg->name, reg->name ?: OPT(reg->name));
 
     // Ignora os campos de metadados e imprime
     // os campos de dados, usando as descrições
