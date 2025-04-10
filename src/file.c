@@ -88,7 +88,10 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
     // Tamanho da string, considerando o
     // delimitador, porém ignorando o código
-    size_t len = current - initial;
+    //
+    // NOTE: o byte na posição atual do arquivo
+    // não foi lido, logo, devemos subtrair 1
+    size_t len = current - initial - 1;
 
     if (len > *rem_size) {
         *rem_size = -1;
@@ -108,7 +111,8 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     fread(data, 1, len, f);
     data[len - 1] = '\0';
 
-    *rem_size -= len;
+    // Inclui o código
+    *rem_size -= len + 1;
 
     return data;
 }

@@ -68,7 +68,11 @@ int main(void)
             }
 
             f_header_t header;
-            file_read_header(f, &header);
+
+            if (!file_read_header(f, &header)) {
+                puts(E_PROCESSINGFILE);
+                return 1;
+            }
 
             while (true) {
                 f_data_reg_t reg = {};
