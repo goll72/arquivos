@@ -73,7 +73,7 @@ int main(void)
             while (true) {
                 f_data_reg_t reg = {};
 
-                if (!file_read_data_reg(f, &reg)) {
+                if (!file_read_data_reg(f, &header, &reg)) {
                     free_var_data_fields(&reg);
 
                     long current = ftell(f);
