@@ -100,7 +100,10 @@ int main(void)
                     break;
                 }
 
-                file_print_data_reg(&header, &reg);
+                if (reg.removed == '0') {
+                    file_print_data_reg(&header, &reg);
+                    printf("\n");
+                }
 
                 free_var_data_fields(&reg);
             }
