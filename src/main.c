@@ -1,5 +1,3 @@
-#include <err.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -39,7 +37,7 @@ static void free_var_data_fields(f_data_reg_t *reg)
  * NOTE: a função `errx` não é usada, pois imprime a mensagem
  * na stream `stderr`.
  */
-static void bail(char *msg)
+static void noreturn bail(char *msg)
 {
     puts(msg);
     exit(1);
