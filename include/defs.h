@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "typeinfo.h"
+
 /**
  * Define os campos do registro de cabeçalho, de forma
  * que uma X macro pode ser passada como parâmetro para
@@ -105,39 +107,30 @@ typedef struct {
 #undef Y
 
 /**
- * Escreve em `*offset` e `*len`, respectivamente, o offset
- * e o tamanho do campo de `f_data_reg` cuja representação
- * na forma de string é `field_repr`. Escreve `true` em `*is_str`
- * se o campo for uma string (`char *`).
+ * Escreve em `*offset` e `*info`, respectivamente, o offset
+ * e o "tipo" do campo de `f_data_reg` cuja representação
+ * na forma de string é `field_repr`.
  *
  * Retorna `false` se `field_repr` for inválido.
  */
-static inline bool data_reg_typeinfo(const char *field_repr, size_t *offset, size_t *len, bool *is_str)
+static inline bool data_reg_typeinfo(const char *field_repr, size_t *offset, enum typeinfo *info)
 {
     if (!field_repr)
         return false;
     
-#define U(t_or_f, T, name, repr)                \
+#define X(T, name, repr)                        \
     if (strcmp(field_repr, repr) == 0) {        \
         *offset = offsetof(f_data_reg_t, name); \
-        *len = sizeof(T);                       \
-        *is_str = t_or_f;                       \
+        *info = GET_TYPEINFO(T);                \
                                                 \
         return true;                            \
     }
 
-#define Xt(...) U(true, __VA_ARGS__)
-#define Xf(...) U(false, __VA_ARGS__)
-
 #define Y(...)
 
-    DATA_REG_FIELDS(Y, Xf, Xt)
+    DATA_REG_FIELDS(Y, X, X)
     
-#undef U
-
-#undef Xt
-#undef Xt
-
+#undef X
 #undef Y
 
     return false;

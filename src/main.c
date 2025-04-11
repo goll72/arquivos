@@ -156,21 +156,22 @@ int main(void)
             if (!file_read_header(f, &header))
                 bail(E_PROCESSINGFILE);
 
-            size_t n_regs = header.n_valid_regs + header.n_removed_regs;
+            size_t n_regs = header.n_valid_regs;
             f_data_reg_t *regs = calloc(n_regs, sizeof *regs);
 
-            // Registros removidos também são buscados
-            for (int i = 0; i < n_regs; i++) {
-                // Lendo a quantidade exata de registros presente no arquivo, nenhuma
-                // tentativa de leitura deveria falhar ou chegar ao final do arquivo
-                if (!file_read_data_reg_or_bail(f, &header, &regs[i])) {
+            for (int i = 0; i < n_regs;) {
+                if (!file_read_data_reg_or_bail(f, &header, &regs[i]))
                     bail(E_PROCESSINGFILE);
-                }
+
+                if (regs[i].removed == '0')
+                    i++;
+                else
+                    free_var_data_fields(&regs[i]);
             }
 
             for (int i = 0; i < n_queries; i++) {
                 int m;
-                bool no_matches = false;
+                bool no_matches = true;
 
                 ret = scanf("%d", &m);
 
@@ -179,27 +180,24 @@ int main(void)
 
                 query_t *query = query_new();
 
-                bool is_str;
-                size_t offset, len;
+                size_t offset;
+                enum typeinfo info;
 
-                if (!data_reg_typeinfo("" /* XXX: ... */, &offset, &len, &is_str))
+                if (!data_reg_typeinfo("" /* XXX: ... */, &offset, &info))
                     bail(E_PROCESSINGFILE);
 
-                query_add_cond_equals(query, is_str, offset, NULL, len);
+                query_add_cond_equals(query, offset, info, NULL);
 
                 /* XXX: ... */
 
                 for (int j = 0; j < n_regs; j++) {
-                    if (query_matches(query, &regs[j])) {
-                        if (regs[j].removed == '0') {
-                            file_print_data_reg(&header, &regs[j]);
-                            printf("\n");
-                        } else {
-                            puts(E_NOREG);
-                        }
+                    if (!query_matches(query, &regs[j]))
+                        continue;
 
-                        no_matches = false;
-                    }
+                    file_print_data_reg(&header, &regs[j]);
+                    printf("\n");
+
+                    no_matches = false;
                 }
 
                 if (no_matches)

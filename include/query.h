@@ -1,12 +1,13 @@
 #ifndef QUERY_H
 #define QUERY_H
 
+#include "typeinfo.h"
+
 #include <stdlib.h>
 #include <stdbool.h>
 
 /**
- * Queries com um sistema de tipos extremamente rudimentar.
- * Há apenas dois tipos: string ou não-string.
+ * Queries com um sistema de tipos rudimentar.
  *
  * Uma query é um conjunto de condições (de igualdade apenas),
  * que ao ser aplicado a um "objeto" (uma região de memória)
@@ -26,22 +27,23 @@ query_t *query_new(void);
 void query_free(query_t *query);
 
 /**
- * Adiciona uma condição de igualdade à query. `str` deve ser `true`
- * se o campo relevante for uma string (`char *`). Nesse caso, a
- * comparação será feita dereferenciando o conteúdo da posição
- * `offset` como um `char *` e levando em consideração o delimitador '\0'.
+ * Adiciona uma condição de igualdade à query.
+ *
+ * Se o campo relevante for uma string (`T_STR`), a comparação
+ * será feita dereferenciando o conteúdo do byte offset `offset`
+ * da região de memória apontada por `obj`, tratando-o como um
+ * `char *` e comparando o seu conteúdo byte-a-byte com a região
+ * de memória apontada por `buf`, levando em consideração o
+ * delimitador '\0'.
  *
  * `offset` corresponde ao offset, em bytes, da região de memória
- * relevante a ser comparada.
+ * relevante a ser comparada, em relação a `obj`.
  *
  * `buf` é a região de memória referência para a comparação. Deve
  * ser alocado dinamicamente. Passará a pertencer à query e será
- * desalocado usando `free` ao usar `query_free`.
- *
- * `len` indica quantos bytes serão comparados se `str` for `false`
- * e quantos bytes, no máximo, serão comparados se `str` for `true`.
+ * desalocado ao usar `query_free`.
  */
-void query_add_cond_equals(query_t *query, bool str, size_t offset, void *buf, size_t len);
+void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, void *buf);
 
 /**
  * Retorna `true` se todas as condições adicionadas
