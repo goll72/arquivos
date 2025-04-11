@@ -49,6 +49,6 @@ void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, vo
  * Retorna `true` se todas as condições adicionadas
  * à query `query` são verdadeiras para `obj`.
  */
-bool query_matches(query_t *query, void *obj);
+bool query_matches(query_t *query, const void *obj);
 
 #endif

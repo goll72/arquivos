@@ -43,18 +43,20 @@ void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, vo
     cond->offset = offset;
     cond->info = info;
 
+    cond->buf = buf;
+
     cond->next = query->conditions;
     query->conditions = cond;
 }
 
-bool query_matches(query_t *query, void *obj)
+bool query_matches(query_t *query, const void *obj)
 {
     // O produto do conjunto vazio é 1
     if (!query->conditions)
         return true;
 
     for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
-        char *buf = ((char *)obj) + cond->offset;
+        const char *const buf = ((const char *)obj) + cond->offset;
 
         switch (cond->info) {
             case T_U32: {
@@ -82,7 +84,7 @@ bool query_matches(query_t *query, void *obj)
                 break;
             }
             case T_STR: {
-                char *str;
+                const char *str;
 
                 // Queremos copiar o conteúdo da região de memória apontada por `buf`
                 // (sendo esse conteúdo um `char *`) para `str`, para que possamos
