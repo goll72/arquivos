@@ -155,10 +155,13 @@ int main(void)
             if (!file_read_header(f, &header))
                 bail(E_PROCESSINGFILE);
 
-            f_data_reg_t *regs = calloc(header.n_valid_regs, sizeof *regs);
+            size_t n_regs = header.n_valid_regs + header.n_removed_regs;
+            f_data_reg_t *regs = calloc(n_regs, sizeof *regs);
 
             // Registros removidos também são buscados
-            for (int i = 0; i < header.n_valid_regs; i++) {
+            for (int i = 0; i < n_regs; i++) {
+                // Lendo a quantidade exata de registros presente no arquivo, nenhuma
+                // tentativa de leitura deveria falhar ou chegar ao final do arquivo
                 if (!file_read_data_reg_or_bail(f, &header, &regs[i])) {
                     bail(E_PROCESSINGFILE);
                 }
@@ -185,7 +188,7 @@ int main(void)
 
                 /* XXX: ... */
 
-                for (int j = 0; j < header.n_valid_regs; j++) {
+                for (int j = 0; j < n_regs; j++) {
                     if (query_matches(query, &regs[j])) {
                         if (regs[j].removed == '0') {
                             file_print_data_reg(&header, &regs[j]);
@@ -206,7 +209,7 @@ int main(void)
                 puts("**********");
             }
 
-            for (int i = 0; i < header.n_valid_regs; i++)
+            for (int i = 0; i < n_regs; i++)
                 free_var_data_fields(&regs[i]);
 
             free(regs);
