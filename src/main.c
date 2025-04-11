@@ -131,6 +131,7 @@ int main(void)
                 free_var_data_fields(&reg);
             }
 
+            // XXX: não deveria estar aqui
             // Imprime o hash do arquivo, equivalente à função binarioNaTela
             printf("%lf\n", hash_file(f));
         }

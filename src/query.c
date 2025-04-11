@@ -34,6 +34,15 @@ void query_free(query_t *query)
 
 void query_add_cond_equals(query_t *query, bool str, size_t offset, void *buf, size_t len)
 {
+    query_cond_t *cond = malloc(sizeof *cond);
+
+    cond->str = str;
+    cond->offset = offset;
+    cond->buf = buf;
+    cond->len = len;
+
+    cond->next = query->conditions;
+    query->conditions = cond;
 }
 
 bool query_matches(query_t *query, void *obj)
