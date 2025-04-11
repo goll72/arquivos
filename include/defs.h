@@ -55,7 +55,7 @@
  * Y/Z(T, name, repr)
  *     T: tipo do campo
  *     name: nome do campo
- *     repr: usada para representar o campo
+ *     repr: string usada para representar o campo
  */
 #define DATA_REG_FIELDS(X, Y, Z)                     \
     X(uint8_t,  removed)                             \
