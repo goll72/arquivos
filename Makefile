@@ -6,14 +6,15 @@ ifeq ($(BUILD),)
 $(error "Define BUILD to a non-empty value")
 endif
 
-SRC = src/main.c src/file.c src/hash.c
+SRC = src/main.c src/file.c src/query.c \
+      src/util/hash.c src/util/csv.c
 OBJ = $(SRC:src/%.c=$(BUILD)/%.o)
 DEP = $(OBJ:.o=.d)
 EXE = $(BUILD)/arquivos
 ZIP = $(BUILD)/arquivos.zip
 GEN = $(BUILD)/.gitignore
 
-BASECFLAGS = -O2 -MMD -std=gnu99 -Iinclude $(CFLAGS)
+BASECFLAGS = -O2 -MMD -std=gnu11 -Iinclude -Wall -Wno-format-extra-args $(CFLAGS)
 BASELDFLAGS = $(LDFLAGS)
 
 all: $(EXE)

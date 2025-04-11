@@ -1,7 +1,9 @@
 #ifndef DEFS_H
 #define DEFS_H
 
+#include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /**
  * Define os campos do registro de cabeçalho, de forma
@@ -41,28 +43,33 @@
  * campos de metadados de tamanho fixo, a macro `Y`
  * para manipular os campos de dados de tamanho fixo
  * e a macro `Z` para os campos de tamanho variável.
- * Todas as macros passadas como argumento recebem os
+ * As macros passadas como argumento recebem os
  * seguintes parâmetros:
  *
  * X(T, name)
  *     T: tipo do campo
  *     name: nome do campo
+ *
+ * Y/Z(T, name, repr)
+ *     T: tipo do campo
+ *     name: nome do campo
+ *     repr: usada para representar o campo
  */
-#define DATA_REG_FIELDS(X, Y, Z)   \
-    X(uint8_t,  removed)           \
-    X(uint32_t, size)              \
-    X(int64_t,  next_removed_reg)  \
-    Y(uint32_t, attack_id)         \
-    Y(uint32_t, year)              \
-    Y(float,    financial_loss)    \
-    Z(char *,   country)           \
-    Z(char *,   attack_type)       \
-    Z(char *,   target_industry)   \
-    Z(char *,   defense_mechanism)
+#define DATA_REG_FIELDS(X, Y, Z)                     \
+    X(uint8_t,  removed)                             \
+    X(uint32_t, size)                                \
+    X(int64_t,  next_removed_reg)                    \
+    Y(uint32_t, attack_id,         "idAttack")       \
+    Y(uint32_t, year,              "year")           \
+    Y(float,    financial_loss,    "financialLoss")  \
+    Z(char *,   country,           "country")        \
+    Z(char *,   attack_type,       "attackType")     \
+    Z(char *,   target_industry,   "targetIndustry") \
+    Z(char *,   defense_mechanism, "defenseMechanism")
 
 /* Define a X macro que define os campos da struct */
 #define X(T, name, ...) typeof(T) name;
-#define Y(T, name)
+#define Y(...)
 
 typedef struct {
     HEADER_REG_FIELDS(X)
@@ -96,5 +103,44 @@ typedef struct {
 
 #undef X
 #undef Y
+
+/**
+ * Escreve em `*offset` e `*len`, respectivamente, o offset
+ * e o tamanho do campo de `f_data_reg` cuja representação
+ * na forma de string é `field_repr`. Escreve `true` em `*is_str`
+ * se o campo for uma string (`char *`).
+ *
+ * Retorna `false` se `field_repr` for inválido.
+ */
+static inline bool data_reg_typeinfo(const char *field_repr, size_t *offset, size_t *len, bool *is_str)
+{
+    if (!field_repr)
+        return false;
+    
+#define U(t_or_f, T, name, repr)                \
+    if (strcmp(field_repr, repr) == 0) {        \
+        *offset = offsetof(f_data_reg_t, name); \
+        *len = sizeof(T);                       \
+        *is_str = t_or_f;                       \
+                                                \
+        return true;                            \
+    }
+
+#define Xt(...) U(true, __VA_ARGS__)
+#define Xf(...) U(false, __VA_ARGS__)
+
+#define Y(...)
+
+    DATA_REG_FIELDS(Y, Xf, Xt)
+    
+#undef U
+
+#undef Xt
+#undef Xt
+
+#undef Y
+
+    return false;
+}
 
 #endif /* DEFS_H */

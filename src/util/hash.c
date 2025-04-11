@@ -1,7 +1,7 @@
-#include "hash.h"
-
 #include <stdio.h>
 #include <stdint.h>
+
+#include "util/hash.h"
 
 double hash_file(FILE *f)
 {

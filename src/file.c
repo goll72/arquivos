@@ -29,7 +29,7 @@ bool file_init(FILE *f)
 
 bool file_read_header(FILE *f, f_header_t *header)
 {
-#define X(T, name, _) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
+#define X(T, name, ...) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
 
     HEADER_REG_FIELDS(X)
 
@@ -40,7 +40,7 @@ bool file_read_header(FILE *f, f_header_t *header)
 
 bool file_write_header(FILE *f, const f_header_t *header)
 {
-#define X(T, name, _) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
+#define X(T, name, ...) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
 
     HEADER_REG_FIELDS(X)
 
@@ -120,11 +120,11 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
 bool file_read_data_reg(FILE *f, const f_header_t *header, f_data_reg_t *reg)
 {
-#define X(T, name) FAIL_IF(fread(&reg->name, sizeof(T), 1, f) != 1)
-#define Y(_, name)                                                      \
+#define X(T, name, ...) FAIL_IF(fread(&reg->name, sizeof(T), 1, f) != 1)
+#define Y(T, name, ...)                                                 \
     reg->name = file_read_var_field(f, header->name##_code, &rem_size); \
     FAIL_IF(rem_size < 0)
-#define Z(T, name)
+#define Z(...)
 
     // Lê apenas os campos de tamanho fixo
     DATA_REG_FIELDS(X, X, Z)
@@ -171,8 +171,8 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
 
 bool file_write_data_reg(FILE *f, const f_header_t *header, const f_data_reg_t *reg)
 {
-#define X(T, name) FAIL_IF(fwrite(&reg->name, sizeof(T), 1, f) != 1)
-#define Y(_, name) FAIL_IF(!file_write_var_field(f, header->name##_code, reg->name))
+#define X(T, name, ...) FAIL_IF(fwrite(&reg->name, sizeof(T), 1, f) != 1)
+#define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, reg->name))
 
     DATA_REG_FIELDS(X, X, Y)
 
@@ -184,8 +184,8 @@ bool file_write_data_reg(FILE *f, const f_header_t *header, const f_data_reg_t *
 
 void file_print_data_reg(const f_header_t *header, const f_data_reg_t *reg)
 {
-#define X(_, name)
-#define Y(_, name)                                                               \
+#define X(...)
+#define Y(T, name, ...)                                                          \
     printf(FMT(reg->name), (int)sizeof header->name##_desc, header->name##_desc, \
         (int)sizeof reg->name, reg->name ?: OPT(reg->name));
 
