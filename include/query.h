@@ -1,10 +1,10 @@
 #ifndef QUERY_H
 #define QUERY_H
 
-#include "typeinfo.h"
-
 #include <stdlib.h>
 #include <stdbool.h>
+
+#include "typeinfo.h"
 
 /**
  * Queries com um sistema de tipos rudimentar.

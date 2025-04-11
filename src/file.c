@@ -8,17 +8,17 @@
     if (x)         \
         return false;
 
-#define FMT(x)                       \
-    _Generic(x,                      \
-        char *: "%2$.*1$s: %3$s\n",  \
-        float: "%2$.*1$s: %3$.2f\n", \
-        uint32_t: "%2$.*1$s: %3$" PRIu32 "\n")
+#define FMT(x)                 \
+    _Generic(x,                \
+        char *: "%.*s: %s\n",  \
+        float: "%.*s: %.2f\n", \
+        uint32_t: "%.*s: %" PRIu32 "\n")
 
 #define OPT(x) _Generic(x, char *: "NADA CONSTA", default: x)
 
 bool file_init(FILE *f)
 {
-#define X(_, name, default) .name = default,
+#define X(T, name, default) .name = default,
 
     static const f_header_t initial_header = { HEADER_REG_FIELDS(X) };
 

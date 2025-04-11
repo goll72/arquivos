@@ -49,9 +49,10 @@
  * As macros passadas como argumento recebem os
  * seguintes parâmetros:
  *
- * X(T, name)
+ * X(T, name, _)
  *     T: tipo do campo
  *     name: nome do campo
+ *     _: ignorado
  *
  * Y/Z(T, name, repr)
  *     T: tipo do campo
@@ -59,9 +60,9 @@
  *     repr: string usada para representar o campo
  */
 #define DATA_REG_FIELDS(X, Y, Z)                     \
-    X(uint8_t,  removed)                             \
-    X(uint32_t, size)                                \
-    X(int64_t,  next_removed_reg)                    \
+    X(uint8_t,  removed,           _)                \
+    X(uint32_t, size,              _)                \
+    X(int64_t,  next_removed_reg,  _)                \
     Y(uint32_t, attack_id,         "idAttack")       \
     Y(uint32_t, year,              "year")           \
     Y(float,    financial_loss,    "financialLoss")  \

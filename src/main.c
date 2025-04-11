@@ -118,6 +118,10 @@ int main(void)
                 bail(E_PROCESSINGFILE);
 
             while (true) {
+                // Devemos inicializar a struct, pois caso a leitura falhe,
+                // é possível que campos de tamanho variável não inicializados
+                // pela função `file_read_data_reg` serão usados como argumento
+                // da função `free` em `free_var_data_fields`.
                 f_data_reg_t reg = {};
 
                 if (!file_read_data_reg_or_bail(f, &header, &reg))

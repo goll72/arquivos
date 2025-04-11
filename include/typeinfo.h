@@ -15,7 +15,7 @@ enum typeinfo {
 };
 
 #define GET_TYPEINFO(T)  \
-    _Generic(T,          \
+    _Generic((T){0},     \
         uint32_t: T_U32, \
         float:    T_FLT, \
         char *:   T_STR)
