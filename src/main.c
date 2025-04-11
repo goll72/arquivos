@@ -37,7 +37,7 @@ static void free_var_data_fields(f_data_reg_t *reg)
  * NOTE: a função `errx` não é usada, pois imprime a mensagem
  * na stream `stderr`.
  */
-static void noreturn bail(char *msg)
+noreturn static void bail(char *msg)
 {
     puts(msg);
     exit(1);
@@ -79,7 +79,7 @@ static bool file_read_data_reg_or_bail(
 
 int main(void)
 {
-    enum functionality func;
+    int func;
     int ret = scanf("%d", &func);
 
     if (ret != 1)
@@ -159,7 +159,7 @@ int main(void)
             size_t n_regs = header.n_valid_regs;
             f_data_reg_t *regs = calloc(n_regs, sizeof *regs);
 
-            for (int i = 0; i < n_regs;) {
+            for (size_t i = 0; i < n_regs;) {
                 if (!file_read_data_reg_or_bail(f, &header, &regs[i]))
                     bail(E_PROCESSINGFILE);
 
@@ -190,7 +190,7 @@ int main(void)
 
                 /* XXX: ... */
 
-                for (int j = 0; j < n_regs; j++) {
+                for (size_t j = 0; j < n_regs; j++) {
                     if (!query_matches(query, &regs[j]))
                         continue;
 
@@ -208,7 +208,7 @@ int main(void)
                 puts("**********");
             }
 
-            for (int i = 0; i < n_regs; i++)
+            for (size_t i = 0; i < n_regs; i++)
                 free_var_data_fields(&regs[i]);
 
             free(regs);

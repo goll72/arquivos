@@ -14,7 +14,7 @@ EXE = $(BUILD)/arquivos
 ZIP = $(BUILD)/arquivos.zip
 GEN = $(BUILD)/.gitignore
 
-BASECFLAGS = -O2 -MMD -std=gnu11 -Iinclude -Wall -Wno-format-extra-args $(CFLAGS)
+BASECFLAGS = -O2 -MMD -std=gnu11 -Iinclude -Wall $(CFLAGS)
 BASELDFLAGS = $(LDFLAGS)
 
 all: $(EXE)

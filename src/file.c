@@ -10,9 +10,9 @@
 
 #define FMT(x)                       \
     _Generic(x,                      \
-        char *: "%2$.*1$s: %4$s\n",  \
-        float: "%2$.*1$s: %4$.2f\n", \
-        uint32_t: "%2$.*1$s: %4$" PRIu32 "\n")
+        char *: "%2$.*1$s: %3$s\n",  \
+        float: "%2$.*1$s: %3$.2f\n", \
+        uint32_t: "%2$.*1$s: %3$" PRIu32 "\n")
 
 #define OPT(x) _Generic(x, char *: "NADA CONSTA", default: x)
 
@@ -92,7 +92,7 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     //
     // NOTE: o byte na posição atual do arquivo não foi lido
     // (não faz parte do campo), logo, devemos subtrair 1
-    size_t len = current - initial - 1;
+    int64_t len = current - initial - 1;
 
     if (len > *rem_size) {
         *rem_size = -1;
@@ -185,9 +185,8 @@ bool file_write_data_reg(FILE *f, const f_header_t *header, const f_data_reg_t *
 void file_print_data_reg(const f_header_t *header, const f_data_reg_t *reg)
 {
 #define X(...)
-#define Y(T, name, ...)                                                          \
-    printf(FMT(reg->name), (int)sizeof header->name##_desc, header->name##_desc, \
-        (int)sizeof reg->name, reg->name ?: OPT(reg->name));
+#define Y(T, name, ...) \
+    printf(FMT(reg->name), (int)sizeof header->name##_desc, header->name##_desc, reg->name ?: OPT(reg->name));
 
     // Ignora os campos de metadados e imprime
     // os campos de dados, usando as descrições

@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "query.h"
 
 typedef struct query_cond query_cond_t;
