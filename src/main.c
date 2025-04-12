@@ -17,6 +17,8 @@ enum functionality {
     FUNC_SELECT_WHERE = 3,
 };
 
+/* clang-format off */
+
 /**
  * Apaga os campos de tamanho variável do registro `reg`.
  */
@@ -30,6 +32,8 @@ static void free_var_data_fields(f_data_reg_t *reg)
 #undef X
 #undef Y
 }
+
+/* clang-format on */
 
 /**
  * Aborta a execução do programa, imprimindo a mensagem `msg`.
@@ -74,6 +78,9 @@ static bool file_read_data_reg_or_bail(
         return false;
     }
 
+    if (reg->removed != '0' && reg->removed != '1')
+        bail(E_PROCESSINGFILE);
+
     return true;
 }
 
@@ -96,9 +103,9 @@ int main(void)
                 bail(E_PROCESSINGFILE);
 
             /* ... */
-        }
 
-        break;
+            break;
+        }
         case FUNC_SELECT_STAR: {
             char bin_file[PATH_MAX];
 
@@ -120,7 +127,7 @@ int main(void)
             while (true) {
                 // Devemos inicializar a struct, pois caso a leitura falhe,
                 // é possível que campos de tamanho variável não inicializados
-                // pela função `file_read_data_reg` serão usados como argumento
+                // pela função `file_read_data_reg` sejam usados como argumento
                 // da função `free` em `free_var_data_fields`.
                 f_data_reg_t reg = {};
 
@@ -138,9 +145,11 @@ int main(void)
             // XXX: não deveria estar aqui
             // Imprime o hash do arquivo, equivalente à função binarioNaTela
             printf("%lf\n", hash_file(f));
-        }
 
-        break;
+            fclose(f);
+
+            break;
+        }
         case FUNC_SELECT_WHERE: {
             int n_queries;
             char bin_file[PATH_MAX];
@@ -174,25 +183,34 @@ int main(void)
             }
 
             for (int i = 0; i < n_queries; i++) {
-                int m;
-                bool no_matches = true;
+                int n_conds;
 
-                ret = scanf("%d", &m);
+                int ret = scanf("%d", &n_conds);
 
                 if (ret != 1)
                     bail(E_PROCESSINGFILE);
 
                 query_t *query = query_new();
 
-                size_t offset;
-                enum typeinfo info;
+                for (int j = 0; j < n_conds; j++) {
+                    size_t offset;
+                    enum typeinfo info;
 
-                if (!data_reg_typeinfo("" /* XXX: ... */, &offset, &info))
-                    bail(E_PROCESSINGFILE);
+                    char field_repr[64];
 
-                query_add_cond_equals(query, offset, info, NULL);
+                    /* ... */
 
-                /* XXX: ... */
+                    if (!data_reg_typeinfo(field_repr, &offset, &info))
+                        bail(E_PROCESSINGFILE);
+
+                    /* ... */
+
+                    query_add_cond_equals(query, offset, info, NULL);
+
+                    /* ... */
+                }
+
+                bool no_matches = true;
 
                 for (size_t j = 0; j < n_regs; j++) {
                     if (!query_matches(query, &regs[j]))
@@ -204,10 +222,10 @@ int main(void)
                     no_matches = false;
                 }
 
+                query_free(query);
+
                 if (no_matches)
                     puts(E_NOREG);
-
-                query_free(query);
 
                 puts("**********");
             }
@@ -216,8 +234,9 @@ int main(void)
                 free_var_data_fields(&regs[i]);
 
             free(regs);
-        }
+            fclose(f);
 
-        break;
+            break;
+        }
     }
 }
