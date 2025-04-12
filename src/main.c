@@ -10,6 +10,7 @@
 #include "error.h"
 
 #include "util/hash.h"
+#include "util/parse.h"
 
 enum functionality {
     FUNC_CREATE_TABLE = 1,
@@ -20,14 +21,14 @@ enum functionality {
 /* clang-format off */
 
 /**
- * Apaga os campos de tamanho variável do registro `reg`.
+ * Apaga os campos de tamanho variável do registro `rec`.
  */
-static void free_var_data_fields(f_data_reg_t *reg)
+static void free_var_data_fields(f_data_rec_t *rec)
 {
 #define X(...)
-#define Y(T, name, ...) free(reg->name);
+#define Y(T, name, ...) free(rec->name);
 
-    DATA_REG_FIELDS(X, X, Y)
+    DATA_REC_FIELDS(X, X, Y)
 
 #undef X
 #undef Y
@@ -48,18 +49,18 @@ noreturn static void bail(char *msg)
 }
 
 /**
- * Idêntica à função `file_read_data_reg`, porém verifica se
+ * Idêntica à função `file_read_data_rec`, porém verifica se
  * o resultado da tentativa de leitura é coerente. Se não for,
  * aborta a execução do programa.
  *
  * Retorna `true` se ainda não tiver chegado ao final do arquivo.
  */
-static bool file_read_data_reg_or_bail(
-    FILE *f, const f_header_t *header, f_data_reg_t *reg)
+static bool file_read_data_rec_or_bail(
+    FILE *f, const f_header_t *header, f_data_rec_t *rec)
 {
 
-    if (!file_read_data_reg(f, header, reg)) {
-        free_var_data_fields(reg);
+    if (!file_read_data_rec(f, header, rec)) {
+        free_var_data_fields(rec);
 
         long current = ftell(f);
 
@@ -78,7 +79,7 @@ static bool file_read_data_reg_or_bail(
         return false;
     }
 
-    if (reg->removed != '0' && reg->removed != '1')
+    if (rec->removed != '0' && rec->removed != '1')
         bail(E_PROCESSINGFILE);
 
     return true;
@@ -127,19 +128,19 @@ int main(void)
             while (true) {
                 // Devemos inicializar a struct, pois caso a leitura falhe,
                 // é possível que campos de tamanho variável não inicializados
-                // pela função `file_read_data_reg` sejam usados como argumento
+                // pela função `file_read_data_rec` sejam usados como argumento
                 // da função `free` em `free_var_data_fields`.
-                f_data_reg_t reg = {};
+                f_data_rec_t rec = {};
 
-                if (!file_read_data_reg_or_bail(f, &header, &reg))
+                if (!file_read_data_rec_or_bail(f, &header, &rec))
                     break;
 
-                if (reg.removed == '0') {
-                    file_print_data_reg(&header, &reg);
+                if (rec.removed == '0') {
+                    file_print_data_rec(&header, &rec);
                     printf("\n");
                 }
 
-                free_var_data_fields(&reg);
+                free_var_data_fields(&rec);
             }
 
             // XXX: não deveria estar aqui
@@ -169,17 +170,17 @@ int main(void)
             if (!file_read_header(f, &header))
                 bail(E_PROCESSINGFILE);
 
-            size_t n_regs = header.n_valid_regs;
-            f_data_reg_t *regs = calloc(n_regs, sizeof *regs);
+            size_t n_recs = header.n_valid_recs;
+            f_data_rec_t *recs = calloc(n_recs, sizeof *recs);
 
-            for (size_t i = 0; i < n_regs;) {
-                if (!file_read_data_reg_or_bail(f, &header, &regs[i]))
+            for (size_t i = 0; i < n_recs;) {
+                if (!file_read_data_rec_or_bail(f, &header, &recs[i]))
                     bail(E_PROCESSINGFILE);
 
-                if (regs[i].removed == '0')
+                if (recs[i].removed == '0')
                     i++;
                 else
-                    free_var_data_fields(&regs[i]);
+                    free_var_data_fields(&recs[i]);
             }
 
             for (int i = 0; i < n_queries; i++) {
@@ -198,25 +199,42 @@ int main(void)
 
                     char field_repr[64];
 
-                    /* ... */
+                    int ret = scanf("%s", field_repr);
 
-                    if (!data_reg_typeinfo(field_repr, &offset, &info))
+                    if (ret != 1 || !data_rec_typeinfo(field_repr, &offset, &info))
                         bail(E_PROCESSINGFILE);
 
-                    /* ... */
+                    void *buf = NULL;
+                    char *str;
 
-                    query_add_cond_equals(query, offset, info, NULL);
+                    switch (info) {
+                        case T_U32:
+                            buf = malloc(sizeof(uint32_t));
+                            break;
+                        case T_FLT:
+                            buf = malloc(sizeof(float));
+                            break;
+                        case T_STR:
+                            buf = &str;
+                            break;
+                    }
 
-                    /* ... */
+                    if (!parse_read_field(stdin, info, buf, " \t", true))
+                        bail(E_PROCESSINGFILE);
+
+                    if (info == T_STR)
+                        buf = str;
+
+                    query_add_cond_equals(query, offset, info, buf);
                 }
 
                 bool no_matches = true;
 
-                for (size_t j = 0; j < n_regs; j++) {
-                    if (!query_matches(query, &regs[j]))
+                for (size_t j = 0; j < n_recs; j++) {
+                    if (!query_matches(query, &recs[j]))
                         continue;
 
-                    file_print_data_reg(&header, &regs[j]);
+                    file_print_data_rec(&header, &recs[j]);
                     printf("\n");
 
                     no_matches = false;
@@ -225,15 +243,15 @@ int main(void)
                 query_free(query);
 
                 if (no_matches)
-                    puts(E_NOREG);
+                    puts(E_NOREC);
 
                 puts("**********");
             }
 
-            for (size_t i = 0; i < n_regs; i++)
-                free_var_data_fields(&regs[i]);
+            for (size_t i = 0; i < n_recs; i++)
+                free_var_data_fields(&recs[i]);
 
-            free(regs);
+            free(recs);
             fclose(f);
 
             break;

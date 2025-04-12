@@ -20,7 +20,7 @@ bool file_init(FILE *f)
 {
 #define X(T, name, default) .name = default,
 
-    static const f_header_t initial_header = { HEADER_REG_FIELDS(X) };
+    static const f_header_t initial_header = { HEADER_REC_FIELDS(X) };
 
 #undef X
 
@@ -31,7 +31,7 @@ bool file_read_header(FILE *f, f_header_t *header)
 {
 #define X(T, name, ...) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
 
-    HEADER_REG_FIELDS(X)
+    HEADER_REC_FIELDS(X)
 
 #undef X
 
@@ -42,7 +42,7 @@ bool file_write_header(FILE *f, const f_header_t *header)
 {
 #define X(T, name, ...) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
 
-    HEADER_REG_FIELDS(X)
+    HEADER_REC_FIELDS(X)
 
 #undef X
 
@@ -118,29 +118,29 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     return data;
 }
 
-bool file_read_data_reg(FILE *f, const f_header_t *header, f_data_reg_t *reg)
+bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
 {
-#define X(T, name, ...) FAIL_IF(fread(&reg->name, sizeof(T), 1, f) != 1)
+#define X(T, name, ...) FAIL_IF(fread(&rec->name, sizeof(T), 1, f) != 1)
 #define Y(T, name, ...)                                                 \
-    reg->name = file_read_var_field(f, header->name##_code, &rem_size); \
+    rec->name = file_read_var_field(f, header->name##_code, &rem_size); \
     FAIL_IF(rem_size < 0)
 #define Z(...)
 
     // Lê apenas os campos de tamanho fixo
-    DATA_REG_FIELDS(X, X, Z)
+    DATA_REC_FIELDS(X, X, Z)
 
     // Calcula o tamanho do restante do registro com base no tamanho
     // presente no arquivo, que inclui os campos de tamanho fixo após
     // o campo `size`. No entanto, queremos apenas o tamanho da parte
     // variável, logo, subtraímos o tamanho desses campos de tamanho
     // fixo que vêm após o campo `size` no registro.
-    int64_t rem_size = reg->size - sizeof(PACKED(f_data_reg_t))
-        + offsetof(PACKED(f_data_reg_t), size) + sizeof reg->size;
+    int64_t rem_size = rec->size - sizeof(PACKED(f_data_rec_t))
+        + offsetof(PACKED(f_data_rec_t), size) + sizeof rec->size;
 
     // NOTE: um registro pode omitir campos de tamanho variável. Nesse
     // caso, a tentativa de leitura de um campo ausente irá "falhar",
     // porém esse campo irá receber o valor `NULL`, como esperado.
-    DATA_REG_FIELDS(Z, Z, Y)
+    DATA_REC_FIELDS(Z, Z, Y)
 
 #undef X
 #undef Y
@@ -169,12 +169,12 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
     return status;
 }
 
-bool file_write_data_reg(FILE *f, const f_header_t *header, const f_data_reg_t *reg)
+bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *rec)
 {
-#define X(T, name, ...) FAIL_IF(fwrite(&reg->name, sizeof(T), 1, f) != 1)
-#define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, reg->name))
+#define X(T, name, ...) FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
+#define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name))
 
-    DATA_REG_FIELDS(X, X, Y)
+    DATA_REC_FIELDS(X, X, Y)
 
 #undef X
 #undef Y
@@ -182,16 +182,17 @@ bool file_write_data_reg(FILE *f, const f_header_t *header, const f_data_reg_t *
     return true;
 }
 
-void file_print_data_reg(const f_header_t *header, const f_data_reg_t *reg)
+void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {
 #define X(...)
-#define Y(T, name, ...) \
-    printf(FMT(reg->name), (int)sizeof header->name##_desc, header->name##_desc, reg->name ?: OPT(reg->name));
+#define Y(T, name, ...)                                                          \
+    printf(FMT(rec->name), (int)sizeof header->name##_desc, header->name##_desc, \
+        rec->name ?: OPT(rec->name));
 
     // Ignora os campos de metadados e imprime
     // os campos de dados, usando as descrições
     // presentes no cabeçalho
-    DATA_REG_FIELDS(X, Y, Y)
+    DATA_REC_FIELDS(X, Y, Y)
 
 #undef X
 #undef Y

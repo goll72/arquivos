@@ -22,12 +22,12 @@
  *     name: nome do campo
  *     default: valor padrão do campo
  */
-#define HEADER_REG_FIELDS(X)                                                      \
+#define HEADER_REC_FIELDS(X)                                                      \
     X(uint8_t,  status,                 '0')                                      \
     X(int64_t,  top,                     -1)                                      \
     X(uint64_t, next_byte_offset,         0)                                      \
-    X(uint32_t, n_valid_regs,             0)                                      \
-    X(uint32_t, n_removed_regs,           0)                                      \
+    X(uint32_t, n_valid_recs,             0)                                      \
+    X(uint32_t, n_removed_recs,           0)                                      \
     X(char[23], attack_id_desc,         "IDENTIFICADOR DO ATAQUE")                \
     X(char[27], year_desc,              "ANO EM QUE O ATAQUE OCORREU")            \
     X(char[28], financial_loss_desc,    "PREJUIZO CAUSADO PELO ATAQUE")           \
@@ -59,10 +59,10 @@
  *     name: nome do campo
  *     repr: string usada para representar o campo
  */
-#define DATA_REG_FIELDS(X, Y, Z)                     \
+#define DATA_REC_FIELDS(X, Y, Z)                     \
     X(uint8_t,  removed,           _)                \
     X(uint32_t, size,              _)                \
-    X(int64_t,  next_removed_reg,  _)                \
+    X(int64_t,  next_removed_rec,  _)                \
     Y(uint32_t, attack_id,         "idAttack")       \
     Y(uint32_t, year,              "year")           \
     Y(float,    financial_loss,    "financialLoss")  \
@@ -76,12 +76,12 @@
 #define Y(...)
 
 typedef struct {
-    HEADER_REG_FIELDS(X)
+    HEADER_REC_FIELDS(X)
 } f_header_t;
 
 typedef struct {
-    DATA_REG_FIELDS(X, X, X)
-} f_data_reg_t;
+    DATA_REC_FIELDS(X, X, X)
+} f_data_rec_t;
 
 /**
  * Tipos "packed"/"empacotados", sem espaçamento
@@ -97,32 +97,32 @@ typedef struct {
 #define PACKED(T) packed_##T
 
 typedef struct {
-    HEADER_REG_FIELDS(X)
+    HEADER_REC_FIELDS(X)
 } __attribute__((packed)) PACKED(f_header_t);
 
 /* Apenas os campos de tamanho fixo */
 typedef struct {
-    DATA_REG_FIELDS(X, X, Y)
-} __attribute__((packed)) PACKED(f_data_reg_t);
+    DATA_REC_FIELDS(X, X, Y)
+} __attribute__((packed)) PACKED(f_data_rec_t);
 
 #undef X
 #undef Y
 
 /**
  * Escreve em `*offset` e `*info`, respectivamente, o offset
- * e o "tipo" do campo de `f_data_reg` cuja representação
+ * e o "tipo" do campo de `f_data_rec_t` cuja representação
  * na forma de string é `field_repr`.
  *
  * Retorna `false` se `field_repr` for inválido.
  */
-static inline bool data_reg_typeinfo(const char *field_repr, size_t *offset, enum typeinfo *info)
+static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enum typeinfo *info)
 {
     if (!field_repr)
         return false;
     
 #define X(T, name, repr)                        \
     if (strcmp(field_repr, repr) == 0) {        \
-        *offset = offsetof(f_data_reg_t, name); \
+        *offset = offsetof(f_data_rec_t, name); \
         *info = GET_TYPEINFO(T);                \
                                                 \
         return true;                            \
@@ -130,7 +130,7 @@ static inline bool data_reg_typeinfo(const char *field_repr, size_t *offset, enu
 
 #define Y(...)
 
-    DATA_REG_FIELDS(Y, X, X)
+    DATA_REC_FIELDS(Y, X, X)
     
 #undef X
 #undef Y
