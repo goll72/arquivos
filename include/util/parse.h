@@ -12,12 +12,12 @@
 
 /**
  * Lê o campo com tipo especificado por `info`, armazenando o
- * resultado na região de memória apontada por `buf`. Se `buf`
- * for `NULL`, a leitura é realizada, porém o resultado não é
- * armazenado.
+ * resultado na região de memória apontada por `dest`. Se
+ * `dest` for `NULL`, a leitura é realizada, porém o resultado
+ * não é armazenado.
  *
  * Caso `info` seja `T_STR`, dereferencia a região de memória
- * apontada por `buf`, lê seu conteudo como um `char *`, aloca
+ * apontada por `dest`, lê seu conteudo como um `char *`, aloca
  * espaço para a string lida e guarda o endereço alocado nessa
  * região de memória.
  *
@@ -26,12 +26,17 @@
  * falhar, todos os bytes até o próximo delimitador serão lidos.
  *
  * Se `quoted` for `true`, apenas irá aceitar strings com
- * aspas duplas, retirando as aspas duplas.
+ * aspas duplas, retirando as aspas duplas e permitindo
+ * ocorrência dos delimitadores dentro das aspas duplas.
+ * Também permitirá espaços em branco antes da string.
  *
- * Retorna `false` se a leitura falhar, se `delims` for `NULL`
+ * Espaços em branco são sempre permitidos antes dos campos
+ * de tipo `T_U32` e `T_FLT`.
+ *
+  * Retorna `false` se a leitura falhar, se `delims` for `NULL`
  * ou se `delims` for vazia.
  */
-bool parse_read_field(FILE *f, enum typeinfo info, void *buf,
+bool parse_read_field(FILE *f, enum typeinfo info, void *dest,
                       const char *delims, bool quoted);
 
 /**
@@ -51,8 +56,9 @@ bool csv_read_field(FILE *f, enum typeinfo info, void *buf);
  * Lê o delimitador de registro CSV '\n' (opcionalmente precedido
  * por '\r'), preparando para realizar a leitura do próximo registro.
  *
- * Retorna `true` se a leitura suceder.
+ * Retorna `true` se a leitura suceder, indicando em `*eof` se o
+ * final do arquivo foi alcançado (esse é o último registro).
  */
-bool csv_next_record(FILE *f);
+bool csv_next_record(FILE *f, bool *eof);
 
 #endif /* PARSE_H */
