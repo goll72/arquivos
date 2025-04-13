@@ -16,7 +16,7 @@
 
 #define OPT(x) _Generic(x, char *: "NADA CONSTA", default: x)
 
-bool file_init(FILE *f)
+void file_init_header(f_header_t *header)
 {
 #define X(T, name, default) .name = default,
 
@@ -24,7 +24,7 @@ bool file_init(FILE *f)
 
 #undef X
 
-    return file_write_header(f, &initial_header);
+    memcpy(header, &initial_header, sizeof initial_header);
 }
 
 bool file_read_header(FILE *f, f_header_t *header)
@@ -134,8 +134,7 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
     // o campo `size`. No entanto, queremos apenas o tamanho da parte
     // variável, logo, subtraímos o tamanho desses campos de tamanho
     // fixo que vêm após o campo `size` no registro.
-    int64_t rem_size = rec->size - sizeof(PACKED(f_data_rec_t))
-        + offsetof(PACKED(f_data_rec_t), size) + sizeof rec->size;
+    int64_t rem_size = rec->size - DATA_REC_SIZE_AFTER_SIZE_FIELD;
 
     // NOTE: um registro pode omitir campos de tamanho variável. Nesse
     // caso, a tentativa de leitura de um campo ausente irá "falhar",

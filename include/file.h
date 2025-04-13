@@ -7,10 +7,10 @@
 #include "defs.h"
 
 /**
- * Inicializa o arquivo `f`, escrevendo o registro de cabeçalho
- * com os valores padrão na posição atual.
+ * Inicializa o registro de cabeçalho `header` com os
+ * valores padrão para um arquivo vazio.
  */
-bool file_init(FILE *f);
+void file_init_header(f_header_t *header);
 
 /**
  * Lê o registro de cabeçalho a partir da posição atual no
