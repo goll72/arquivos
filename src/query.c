@@ -26,8 +26,10 @@ void query_free(query_t *query)
     query_cond_t *prev = NULL;
 
     for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
-        free(prev->buf);
-        free(prev);
+        if (prev) {
+            free(prev->buf);
+            free(prev);
+        }
 
         prev = cond;
     }
