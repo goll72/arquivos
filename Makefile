@@ -37,8 +37,8 @@ $(BUILD)/:
 $(BUILD)/%/:
 	mkdir -p $@
 
-$(ZIP): $(SRC) Makefile | $(BUILD)/
-	zip -r $@ . -i $^
+$(ZIP): Makefile video.mp4 | $(BUILD)/
+	zip -MM -r $@ . -i '*.c' '*.h' $^
 
 $(EXE): $(OBJ) $(GEN)
 	$(CC) $(BASECFLAGS) $(OBJ) $(BASELDFLAGS) -o $@
