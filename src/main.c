@@ -12,6 +12,7 @@
 #include "util/hash.h"
 #include "util/parse.h"
 
+
 enum functionality {
     FUNC_CREATE_TABLE = 1,
     FUNC_SELECT_STAR = 2,
