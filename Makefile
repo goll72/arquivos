@@ -23,7 +23,7 @@ run: $(EXE)
 	$(EXE)
 
 zip: | $(BUILD)/
-	zip -MM -r $(ZIP) . -i '*.c' '*.h' $^
+	zip -MM -r $(ZIP) . -i '*.c' '*.h' Makefile
 
 clean:
 	rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
