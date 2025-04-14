@@ -21,35 +21,35 @@
  * espaço para a string lida e guarda o endereço alocado nessa
  * região de memória.
  *
- * `delims` é uma string contendo os valores de delimitador
- * aceitos. Se `delims` tiver um valor válido, porém a leitura
- * falhar, todos os bytes até o próximo delimitador serão lidos.
+ * Os delimitadores aceitos para campos do tipo `T_STR` são
+ * especificados por `delims`. Se for `NULL`, a string deverá
+ * aparecer entre aspas duplas, não sendo possível ler strings
+ * contendo aspas duplas.
  *
- * Se `quoted` for `true`, apenas irá aceitar strings com
- * aspas duplas, retirando as aspas duplas e permitindo
- * ocorrência dos delimitadores dentro das aspas duplas.
- * Também permitirá espaços em branco antes da string.
+ * Espaços em branco são sempre permitidos antes dos campos.
+ * Não é possível ler uma string contendo apenas espaços se
+ * `delims` não for `NULL`.
  *
- * Espaços em branco são sempre permitidos antes dos campos
- * de tipo `T_U32` e `T_FLT`.
+ * Valores ausentes ("nulos") são permitidos. Os delimitadores
+ * passados em `delims` são usados para verificar se os campos
+ * estão presentes. Para essa verificação, '\r' e '\n' também
+ * são considerados delimitadores. Note que delimitadores só
+ * são "lidos" (consumidos) ao ler campos com valor ausente.
  *
- * Valores ausentes ("nulos") são permitidos. Campos do tipo
- * `T_U32` e `T_FLT` serão inicializados com `UINT_MAX`
- * (equivalente a `(uint32_t) -1`) e `-1.f`, respectivamente,
- * nesse caso. Não é possível ler uma string vazia, as sequências
- * <delim> (se `!quoted`) e ["] ["] <delim> (se `quoted`) são
- * ambas interpretadas como `NULL`.
+ * Campos do tipo `T_U32` e `T_FLT` serão inicializados com
+ * `UINT_MAX` (equivalente a `(uint32_t) -1`) e `-1.f`,
+ * respectivamente, nesse caso. Não é possível ler uma string
+ * vazia: as sequências <delim> (se `!quoted`) e ["] ["]
+ * (se `quoted`) são ambas interpretadas como `NULL`.
  *
- * Retorna `false` se a leitura falhar, se `delims` for `NULL`
- * ou se `delims` for vazia.
+ * Retorna `false` se a leitura falhar.
  */
-bool parse_read_field(FILE *f, enum typeinfo info, void *dest,
-                      const char *delims, bool quoted);
+bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delims);
 
 /**
  * Funções para lidar com arquivos CSV. Essas funções asssumem
- * que os arquivos são "seekable" (`fseek` pode ser usado), ao
- * contrário das funções acima.
+ * que os arquivos são "seekable" (`ftell` e `fseek` podem ser
+ * usados), ao contrário das funções acima.
  */
 
 /**

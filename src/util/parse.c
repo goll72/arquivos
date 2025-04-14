@@ -4,15 +4,6 @@
 
 #include "util/parse.h"
 
-static void read_until_delim(FILE *f, const char *delims)
-{
-    int c = 0;
-
-    do {
-        c = fgetc(f);
-    } while (c != EOF && !strchr(delims, c));
-}
-
 static inline char *append_realloc(char *result, size_t *len, size_t *cap, char c)
 {
     if (!result)
@@ -29,28 +20,27 @@ static inline char *append_realloc(char *result, size_t *len, size_t *cap, char 
     return result;
 }
 
-bool parse_read_field(
-    FILE *f, enum typeinfo info, void *dest, const char *delims, bool quoted)
+bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delims)
 {
-    if (!delims || delims[0] == '\0')
-        return false;
+    int c;
+
+    do {
+        c = fgetc(f);
+    } while (c == ' ' || c == '\t');
+
+    bool is_null = c == '\n' || (delims && strchr(delims, c));
+
+    ungetc(c, f);
 
     switch (info) {
         case T_U32: {
             uint32_t result = -1;
-            int c = fgetc(f);
 
-            if (!strchr(delims, c)) {
-                ungetc(c, f);
-
+            if (!is_null) {
                 int ret = fscanf(f, "%" SCNu32, &result);
 
-                c = fgetc(f);
-
-                if (ret != 1 || c == EOF || !strchr(delims, c)) {
-                    read_until_delim(f, delims);
+                if (ret != 1)
                     return false;
-                }
             }
 
             if (dest)
@@ -60,19 +50,12 @@ bool parse_read_field(
         }
         case T_FLT: {
             float result = -1;
-            int c = fgetc(f);
 
-            if (!strchr(delims, c)) {
-                ungetc(c, f);
-
+            if (!is_null) {
                 int ret = fscanf(f, "%f", &result);
 
-                c = fgetc(f);
-
-                if (ret != 1 || c == EOF || !strchr(delims, c)) {
-                    read_until_delim(f, delims);
+                if (ret != 1)
                     return false;
-                }
             }
 
             if (dest)
@@ -82,66 +65,32 @@ bool parse_read_field(
         }
         case T_STR: {
             char *result = NULL;
-            int c = fgetc(f);
+            int c;
 
-            if (strchr(delims, c)) {
-                if (quoted)
-                    return false;
-
-                if (dest)
-                    memcpy(dest, &result, sizeof result);
-
-                return true;
-            }
-
-            if (quoted) {
-                while (isspace(c))
-                    c = fgetc(f);
+            if (!delims) {
+                c = fgetc(f);
 
                 if (c != '"')
                     return false;
-            } else {
-                ungetc(c, f);
             }
 
             size_t cap = 8;
             size_t len = 0;
 
-            int prev;
-
             if (dest)
                 result = malloc(cap);
 
             while (true) {
-                prev = c;
-
                 c = fgetc(f);
 
-                if (c == EOF) {
-                    free(result);
-                    return false;
-                }
-
-                if (strchr(delims, c)) {
-                    if (!quoted) {
-                        result = append_realloc(result, &len, &cap, '\0');
-                        break;
-                    } else if (quoted && prev == '"') {
-                        len--;
-
-                        if (len == 0) {
-                            free(result);
-                            result = NULL;
-
-                            if (dest)
-                                memcpy(dest, &result, sizeof result);
-
-                            return true;
-                        }
-
-                        result = append_realloc(result, &len, &cap, '\0');
-                        break;
+                if ((!delims && c == '"') || (delims && strchr(delims, c))) {
+                    if (len == 0) {
+                        free(result);
+                        result = NULL;
                     }
+
+                    result = append_realloc(result, &len, &cap, '\0');
+                    break;
                 }
 
                 result = append_realloc(result, &len, &cap, c);
@@ -161,30 +110,51 @@ bool parse_read_field(
 
 bool csv_read_field(FILE *f, enum typeinfo info, void *buf)
 {
-    return parse_read_field(f, info, buf, ",\r\n", false);
+    bool status = parse_read_field(f, info, buf, ",\r\n");
+
+    if (!status)
+        return false;
+
+    int c;
+
+    // Nesse caso, o delimitador foi lido em `parse_read_field`,
+    // mas devemos lê-lo novamente.
+    if (info == T_STR)
+        fseek(f, -1, SEEK_CUR);
+
+    do {
+        c = fgetc(f);
+
+        if (c == '\r' || c == '\n') {
+            ungetc(c, f);
+            return true;
+        }
+    } while (isspace(c));
+
+    return c == ',';
 }
 
 bool csv_next_record(FILE *f, bool *eof)
 {
-    // Volta para o byte anterior, um byte delimitador
-    // consumido pela função `parse_read_field`.
-    fseek(f, -1, SEEK_CUR);
+    int c = ' ';
+    int prev = c;
 
-    int prev = fgetc(f);
+    bool valid = true;
 
-    if (prev != '\n') {
-        if (prev != '\r')
-            return false;
+    while (isspace(c)) {
+        if (prev == '\r' || c == '\n') {
+            valid = c == '\n';
 
-        int c = fgetc(f);
+            c = fgetc(f);
+            break;
+        }
 
-        if (c != '\n')
-            return false;
+        prev = c;
+        c = fgetc(f);
     }
 
-    int c = fgetc(f);
-    *eof = c == EOF;
     ungetc(c, f);
+    *eof = c == EOF;
 
-    return true;
+    return valid;
 }

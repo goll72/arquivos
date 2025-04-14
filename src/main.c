@@ -38,9 +38,6 @@ static void free_var_data_fields(f_data_rec_t *rec)
 
 /**
  * Aborta a execução do programa, imprimindo a mensagem `msg`.
- *
- * NOTE: a função `errx` não é usada, pois imprime a mensagem
- * na stream `stderr`.
  */
 noreturn static void bail(char *msg)
 {
@@ -108,21 +105,21 @@ int main(void)
             break;
         }
         case FUNC_SELECT_STAR: {
-            char bin_file[PATH_MAX];
+            char bin_path[PATH_MAX];
 
-            int ret = scanf("%s", bin_file);
+            int ret = scanf("%s", bin_path);
 
             if (ret != 1)
                 bail(E_PROCESSINGFILE);
 
-            FILE *f = fopen(bin_file, "rb");
+            FILE *f = fopen(bin_path, "rb");
 
             if (!f)
                 bail(E_PROCESSINGFILE);
 
             f_header_t header;
 
-            if (!file_read_header(f, &header))
+            if (!file_read_header(f, &header) || header.status != '1')
                 bail(E_PROCESSINGFILE);
 
             while (true) {
@@ -143,37 +140,36 @@ int main(void)
                 free_var_data_fields(&rec);
             }
 
-            // XXX: não deveria estar aqui
-            // Imprime o hash do arquivo, equivalente à função binarioNaTela
-            printf("%lf\n", hash_file(f));
-
             fclose(f);
 
             break;
         }
         case FUNC_SELECT_WHERE: {
             int n_queries;
-            char bin_file[PATH_MAX];
+            char bin_path[PATH_MAX];
 
-            int ret = scanf("%s %d", bin_file, &n_queries);
+            int ret = scanf("%s %d", bin_path, &n_queries);
 
             if (ret != 2)
                 bail(E_PROCESSINGFILE);
 
-            FILE *f = fopen(bin_file, "rb");
+            FILE *f = fopen(bin_path, "rb");
 
             if (!f)
                 bail(E_PROCESSINGFILE);
 
             f_header_t header;
 
-            if (!file_read_header(f, &header))
+            if (!file_read_header(f, &header) || header.status != '1')
                 bail(E_PROCESSINGFILE);
 
             size_t n_recs = header.n_valid_recs;
             f_data_rec_t *recs = calloc(n_recs, sizeof *recs);
 
             for (size_t i = 0; i < n_recs;) {
+                // Espera-se que essa função nunca chegue ao final do arquivo (EOF),
+                // pois estamos lendo a quantidade exata de registros que é reportada
+                // no registro de cabeçalho do arquivo
                 if (!file_read_data_rec_or_bail(f, &header, &recs[i]))
                     bail(E_PROCESSINGFILE);
 
@@ -199,14 +195,24 @@ int main(void)
 
                     char field_repr[64];
 
+                    // Lê o campo (representação na forma de string)
                     int ret = scanf("%s", field_repr);
 
+                    // Recupera metadados sobre o campo que serão usados para
+                    // realizar a query: offset do campo na struct `f_data_rec_t`
+                    // e seu tipo (um `enum typeinfo`).
                     if (ret != 1 || !data_rec_typeinfo(field_repr, &offset, &info))
                         bail(E_PROCESSINGFILE);
 
                     void *buf = NULL;
                     char *str;
 
+                    // Reserva espaço para guardar o valor que será lido (e posteriormente
+                    // usado na query), de acordo com o tipo do campo. Todos os valores
+                    // passados para a query devem ser alocados dinamicamente. No entanto,
+                    // campos do tipo `T_STR` já são alocados dinamicamente pela função
+                    // `parse_read_field`, logo só precisamos guardar o ponteiro
+                    // temporariamente.
                     switch (info) {
                         case T_U32:
                             buf = malloc(sizeof(uint32_t));
@@ -219,7 +225,7 @@ int main(void)
                             break;
                     }
 
-                    if (!parse_read_field(stdin, info, buf, " \t", true))
+                    if (!parse_read_field(stdin, info, buf, NULL))
                         bail(E_PROCESSINGFILE);
 
                     if (info == T_STR)
@@ -242,8 +248,10 @@ int main(void)
 
                 query_free(query);
 
-                if (no_matches)
+                if (no_matches) {
                     puts(E_NOREC);
+                    printf("\n");
+                }
 
                 puts("**********");
             }
