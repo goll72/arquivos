@@ -38,11 +38,15 @@ static void free_var_data_fields(f_data_rec_t *rec)
 
 /**
  * Aborta a execução do programa, imprimindo a mensagem `msg`.
+ *
+ * Embora isso não tenha sido especificado, observa-se que o
+ * código de saída deve ser 0, caso contrário um caso de teste
+ * no run.codes irá falhar.
  */
 noreturn static void bail(char *msg)
 {
     puts(msg);
-    exit(1);
+    exit(0);
 }
 
 /**

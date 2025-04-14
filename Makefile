@@ -22,7 +22,8 @@ all: $(EXE)
 run: $(EXE)
 	$(EXE)
 
-zip: $(ZIP)
+zip: | $(BUILD)/
+	zip -MM -r $(ZIP) . -i '*.c' '*.h' $^
 
 clean:
 	rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
@@ -36,9 +37,6 @@ $(BUILD)/:
 
 $(BUILD)/%/:
 	mkdir -p $@
-
-$(ZIP): Makefile video.mp4 | $(BUILD)/
-	zip -MM -r $@ . -i '*.c' '*.h' $^
 
 $(EXE): $(OBJ) $(GEN)
 	$(CC) $(BASECFLAGS) $(OBJ) $(BASELDFLAGS) -o $@

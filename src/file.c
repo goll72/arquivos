@@ -109,7 +109,11 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
     // Também queremos ler o delimitador, mesmo
     // que ele seja imediatamente sobrescrito
-    fread(data, 1, len, f);
+    if (fread(data, 1, len, f) != len) {
+        free(data);
+        return NULL;
+    }
+        
     data[len - 1] = '\0';
 
     // Inclui o código no cálculo do tamanho restante do registro
