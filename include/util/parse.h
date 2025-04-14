@@ -33,7 +33,14 @@
  * Espaços em branco são sempre permitidos antes dos campos
  * de tipo `T_U32` e `T_FLT`.
  *
-  * Retorna `false` se a leitura falhar, se `delims` for `NULL`
+ * Valores ausentes ("nulos") são permitidos. Campos do tipo
+ * `T_U32` e `T_FLT` serão inicializados com `UINT_MAX`
+ * (equivalente a `(uint32_t) -1`) e `-1.f`, respectivamente,
+ * nesse caso. Não é possível ler uma string vazia, as sequências
+ * <delim> (se `!quoted`) e ["] ["] <delim> (se `quoted`) são
+ * ambas interpretadas como `NULL`.
+ *
+ * Retorna `false` se a leitura falhar, se `delims` for `NULL`
  * ou se `delims` for vazia.
  */
 bool parse_read_field(FILE *f, enum typeinfo info, void *dest,

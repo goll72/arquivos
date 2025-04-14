@@ -71,6 +71,21 @@
     Z(char *,   target_industry,   "targetIndustry") \
     Z(char *,   defense_mechanism, "defenseMechanism")
 
+/**
+ * Define os campos de dados do registro de dados, na
+ * ordem em que devem ser impressos. A macro `X`
+ * passada como parâmetro pode ser usada para manipular
+ * esses campos, nessa ordem.
+ */
+#define DATA_REC_PRINT_FIELDS(X) \
+    X(attack_id)                 \
+    X(year)                      \
+    X(country)                   \
+    X(target_industry)           \
+    X(attack_type)               \
+    X(financial_loss)            \
+    X(defense_mechanism)
+
 /* Define a X macro que define os campos da struct */
 #define X(T, name, ...) typeof(T) name;
 #define Y(...)
@@ -115,7 +130,7 @@ typedef struct {
  * valor é válido ao ler um registro.
  */
 #define DATA_REC_SIZE_AFTER_SIZE_FIELD \
-    sizeof(PACKED(f_data_rec_t)) - offsetof(PACKED(f_data_rec_t), size) - sizeof(((PACKED(f_data_rec_t) *)0)->size)
+    (sizeof(PACKED(f_data_rec_t)) - offsetof(PACKED(f_data_rec_t), size) - sizeof(((PACKED(f_data_rec_t) *)0)->size))
 
 /**
  * Escreve em `*offset` e `*info`, respectivamente, o offset

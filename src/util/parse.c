@@ -37,13 +37,20 @@ bool parse_read_field(
 
     switch (info) {
         case T_U32: {
-            uint32_t result;
-            int ret = fscanf(f, "%" SCNu32, &result);
+            uint32_t result = -1;
             int c = fgetc(f);
 
-            if (ret != 1 || c == EOF || !strchr(delims, c)) {
-                read_until_delim(f, delims);
-                return false;
+            if (!strchr(delims, c)) {
+                ungetc(c, f);
+
+                int ret = fscanf(f, "%" SCNu32, &result);
+
+                c = fgetc(f);
+
+                if (ret != 1 || c == EOF || !strchr(delims, c)) {
+                    read_until_delim(f, delims);
+                    return false;
+                }
             }
 
             if (dest)
@@ -52,13 +59,20 @@ bool parse_read_field(
             break;
         }
         case T_FLT: {
-            float result;
-            int ret = fscanf(f, "%f", &result);
+            float result = -1;
             int c = fgetc(f);
 
-            if (ret != 1 || c == EOF || !strchr(delims, c)) {
-                read_until_delim(f, delims);
-                return false;
+            if (!strchr(delims, c)) {
+                ungetc(c, f);
+
+                int ret = fscanf(f, "%f", &result);
+
+                c = fgetc(f);
+
+                if (ret != 1 || c == EOF || !strchr(delims, c)) {
+                    read_until_delim(f, delims);
+                    return false;
+                }
             }
 
             if (dest)
@@ -67,24 +81,33 @@ bool parse_read_field(
             break;
         }
         case T_STR: {
+            char *result = NULL;
             int c = fgetc(f);
 
-            if (!quoted)
-                ungetc(c, f);
-            else if (quoted) {
+            if (strchr(delims, c)) {
+                if (quoted)
+                    return false;
+
+                if (dest)
+                    memcpy(dest, &result, sizeof result);
+
+                return true;
+            }
+
+            if (quoted) {
                 while (isspace(c))
                     c = fgetc(f);
 
                 if (c != '"')
                     return false;
+            } else {
+                ungetc(c, f);
             }
 
             size_t cap = 8;
             size_t len = 0;
 
             int prev;
-
-            char *result = NULL;
 
             if (dest)
                 result = malloc(cap);
@@ -105,6 +128,16 @@ bool parse_read_field(
                         break;
                     } else if (quoted && prev == '"') {
                         len--;
+
+                        if (len == 0) {
+                            free(result);
+                            result = NULL;
+
+                            if (dest)
+                                memcpy(dest, &result, sizeof result);
+
+                            return true;
+                        }
 
                         result = append_realloc(result, &len, &cap, '\0');
                         break;

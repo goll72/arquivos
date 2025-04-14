@@ -8,13 +8,13 @@
     if (x)         \
         return false;
 
+#define NULL_VALUE(x) _Generic(x, char *: NULL, float: -1, uint32_t: -1)
+
 #define FMT(x)                 \
     _Generic(x,                \
         char *: "%.*s: %s\n",  \
         float: "%.*s: %.2f\n", \
         uint32_t: "%.*s: %" PRIu32 "\n")
-
-#define OPT(x) _Generic(x, char *: "NADA CONSTA", default: x)
 
 void file_init_header(f_header_t *header)
 {
@@ -183,16 +183,18 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
 
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {
-#define X(...)
-#define Y(T, name, ...)                                                          \
-    printf(FMT(rec->name), (int)sizeof header->name##_desc, header->name##_desc, \
-        rec->name ?: OPT(rec->name));
+#define HEADER_DESC_ARGS(name) (int)sizeof header->name##_desc, header->name##_desc
 
-    // Ignora os campos de metadados e imprime
-    // os campos de dados, usando as descrições
-    // presentes no cabeçalho
-    DATA_REC_FIELDS(X, Y, Y)
+#define X(name)                                                \
+    if (rec->name == NULL_VALUE(rec->name))                    \
+        printf("%.*s: NADA CONSTA\n", HEADER_DESC_ARGS(name)); \
+    else                                                       \
+        printf(FMT(rec->name), HEADER_DESC_ARGS(name), rec->name);
+
+    // Imprime os campos de dados, usando as descrições presentes no cabeçalho
+    DATA_REC_PRINT_FIELDS(X)
 
 #undef X
-#undef Y
+
+#undef HEADER_DESC_ARGS
 }
