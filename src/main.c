@@ -131,7 +131,97 @@ int main(void)
             if (ret != 2)
                 bail(E_PROCESSINGFILE);
 
-            /* ... */
+            FILE *csv_f = fopen(csv_path, "r");
+            FILE *bin_f = fopen(bin_path, "w+");
+
+            if (!csv_f || !bin_f)
+                bail(E_PROCESSINGFILE);
+
+#define X(T, name, ...)                      \
+    if (!csv_read_field(csv_f, T_STR, NULL)) \
+        bail(E_PROCESSINGFILE);
+
+#define Y(...)
+
+            // Pula os campos de descrição presentes no arquivo CSV
+            // (realiza a leitura, porém não guarda os dados lidos)
+            DATA_REC_FIELDS(Y, X, X)
+
+#undef X
+#undef Y
+
+            f_header_t header;
+            file_init_header(&header);
+
+            if (!file_write_header(bin_f, &header))
+                bail(E_PROCESSINGFILE);
+
+            while (true) {
+                bool eof;
+
+                if (!csv_next_record(csv_f, &eof))
+                    bail(E_PROCESSINGFILE);
+
+                if (eof)
+                    break;
+
+                f_data_rec_t rec = {
+                    .removed = '0',
+                    .size = DATA_REC_SIZE_AFTER_SIZE_FIELD,
+                    .next_removed_rec = -1,
+                };
+
+#define READ_COMMON(T, name)                                \
+    if (!csv_read_field(csv_f, GET_TYPEINFO(T), &rec.name)) \
+        bail(E_PROCESSINGFILE);
+
+#define X(T, name, ...) READ_COMMON(T, name)
+
+#define Y(T, name, ...)  \
+    READ_COMMON(T, name) \
+    rec.size += rec.name ? strlen(rec.name) + 2 : 0;
+
+#define Z(...)
+
+                // Ignora os campos de metadados (Z) e lê os valores dos campos
+                // de tamanho fixo e variável, em ordem, a partir do arquivo
+                // CSV, atualizando o tamanho do registro de acordo com o
+                // tamanho de cada campo de tamanho variável (Y).
+                //
+                // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
+                // tamanho da string devido ao código do campo e ao delimitador,
+                // que ocupam 1 byte cada
+                DATA_REC_FIELDS(Z, X, Y)
+
+#undef X
+#undef Y
+#undef Z
+
+#undef READ_COMMON
+
+                if (!file_write_data_rec(bin_f, &header, &rec))
+                    bail(E_PROCESSINGFILE);
+
+                free_var_data_fields(&rec);
+
+                header.n_valid_recs++;
+            }
+
+            header.next_byte_offset = ftell(bin_f);
+
+            // Marca o arquivo como "limpo"/consistente
+            header.status = '1';
+
+            // Escreve o header após realizar as modificações
+            fseek(bin_f, 0, SEEK_SET);
+            file_write_header(bin_f, &header);
+
+            // Imprime o hash do arquivo, equivalente à função binarioNaTela
+            fseek(bin_f, 0, SEEK_SET);
+            printf("%lf\n", hash_file(bin_f));
+
+            fclose(csv_f);
+            fclose(bin_f);
 
             break;
         }
