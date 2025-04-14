@@ -29,7 +29,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
         c = fgetc(f);
     } while (c == ' ' || c == '\t');
 
-    bool is_null = c == '\n' || (delims && strchr(delims, c));
+    bool is_null = (c == '\n' || c == '\r') || (delims && strchr(delims, c));
 
     ungetc(c, f);
 
@@ -109,9 +109,9 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
     return true;
 }
 
-bool csv_read_field(FILE *f, enum typeinfo info, void *buf)
+bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
 {
-    bool status = parse_read_field(f, info, buf, ",\r\n");
+    bool status = parse_read_field(f, info, dest, ",\r\n");
 
     if (!status)
         return false;

@@ -57,7 +57,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
  *
  * vd. `parse_read_field`.
  */
-bool csv_read_field(FILE *f, enum typeinfo info, void *buf);
+bool csv_read_field(FILE *f, enum typeinfo info, void *dest);
 
 /**
  * Lê o delimitador de registro CSV '\n' (opcionalmente precedido
