@@ -156,8 +156,8 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
 
     // `field_repr` é comparado, um a um, com o valor de `repr` para cada um
     // dos campos até que seja encontrado um valor correspondente. Ou seja,
-    // a busca realizada por essa função é da ordem de O(n), sendo n a quantidade
-    // de strings (campos definidos no registro).
+    // a busca realizada por essa função é da ordem de O(n), sendo n a
+    // quantidade de strings (campos definidos no registro).
     //
     // É possível usar um hashmap para realizar a busca em O(1).
     DATA_REC_FIELDS(Y, X, X)

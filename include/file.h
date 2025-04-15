@@ -6,6 +6,8 @@
 
 #include "defs.h"
 
+/** Funções para lidar com os registros do arquivo. */
+
 /**
  * Inicializa o registro de cabeçalho `header` com os
  * valores padrão para um arquivo vazio.

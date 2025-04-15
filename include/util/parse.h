@@ -6,9 +6,7 @@
 
 #include "typeinfo.h"
 
-/**
- * Funções para lidar com parsing de strings.
- */
+/** Funções para lidar com parsing de strings. */
 
 /**
  * Lê o campo com tipo especificado por `info`, armazenando o

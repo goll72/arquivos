@@ -6,6 +6,9 @@
 /**
  * Define os tipos suportados por esse sistema rudimentar
  * de reflexão de tipos.
+ *
+ * Usado para permitir que o código de query e parsing de
+ * strings seja mais genérico.
  */
 
 enum typeinfo {

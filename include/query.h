@@ -12,6 +12,8 @@
  * Uma query é um conjunto de condições (de igualdade apenas),
  * que ao ser aplicado a um "objeto" (uma região de memória)
  * diz se as condições passam (realiza um E lógico).
+ *
+ * Usada para implementar condições na busca por registros no arquivo.
  */
 
 typedef struct query query_t;

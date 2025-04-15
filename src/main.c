@@ -87,9 +87,39 @@ static bool file_read_data_rec_or_bail(
     return true;
 }
 
+/**
+ * Lê uma string (sem espaços) da `stdin`, abre um arquivo com
+ * caminho dado por essa string, repassando o modo de abertura
+ * `mode` para `fopen`. Lê o registro de cabeçalho presente no
+ * arquivo e armazena-o em `*header`.
+ *
+ * Aborta a execução em caso de erro ou se o arquivo estiver
+ * inconsistente.
+ */
+static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
+{
+    char path[PATH_MAX];
+    int ret = scanf("%s", path);
+
+    if (ret != 1)
+        bail(E_PROCESSINGFILE);
+
+    FILE *f = fopen(path, mode);
+
+    if (!f)
+        bail(E_PROCESSINGFILE);
+
+    if (!file_read_header(f, header) || header->status != '1')
+        bail(E_PROCESSINGFILE);
+
+    return f;
+}
+ 
 int main(void)
 {
     int func;
+
+    // Lê a funcionalidade da `stdin`
     int ret = scanf("%d", &func);
 
     if (ret != 1)
@@ -97,10 +127,10 @@ int main(void)
 
     switch (func) {
         case FUNC_CREATE_TABLE: {
-            char csv_file[PATH_MAX];
-            char bin_file[PATH_MAX];
+            char csv_path[PATH_MAX];
+            char bin_path[PATH_MAX];
 
-            int ret = scanf("%s %s", csv_file, bin_file);
+            int ret = scanf("%s %s", csv_path, bin_path);
 
             if (ret != 2)
                 bail(E_PROCESSINGFILE);
@@ -110,22 +140,9 @@ int main(void)
             break;
         }
         case FUNC_SELECT_STAR: {
-            char bin_path[PATH_MAX];
-
-            int ret = scanf("%s", bin_path);
-
-            if (ret != 1)
-                bail(E_PROCESSINGFILE);
-
-            FILE *f = fopen(bin_path, "rb");
-
-            if (!f)
-                bail(E_PROCESSINGFILE);
-
             f_header_t header;
-
-            if (!file_read_header(f, &header) || header.status != '1')
-                bail(E_PROCESSINGFILE);
+            
+            FILE *f = file_open_from_stdin_or_bail(&header, "rb");
 
             bool no_matches = true;
 
@@ -158,26 +175,25 @@ int main(void)
         }
         case FUNC_SELECT_WHERE: {
             int n_queries;
-            char bin_path[PATH_MAX];
-
-            int ret = scanf("%s %d", bin_path, &n_queries);
-
-            if (ret != 2)
-                bail(E_PROCESSINGFILE);
-
-            FILE *f = fopen(bin_path, "rb");
-
-            if (!f)
-                bail(E_PROCESSINGFILE);
-
             f_header_t header;
 
-            if (!file_read_header(f, &header) || header.status != '1')
+            FILE *f = file_open_from_stdin_or_bail(&header, "rb");
+            
+            int ret = scanf("%d", &n_queries);
+
+            if (ret != 1)
                 bail(E_PROCESSINGFILE);
 
             size_t n_recs = header.n_valid_recs;
             f_data_rec_t *recs = calloc(n_recs, sizeof *recs);
 
+            // Lê todos os registros válidos e os armazena em um array, o que é mais
+            // eficiente do que percorrer o arquivo várias vezes, considerando que
+            // serão realizadas várias buscas consecutivamente.
+            //
+            // No entanto, a técnica utilizada para implementar a funcionalidade
+            // 2/FUNC_SELECT_STAR (guardar apenas um registro por vez) é preferível
+            // caso o arquivo contenha uma quantidade extremamente alta de registros.
             for (size_t i = 0; i < n_recs;) {
                 // Espera-se que essa função nunca chegue ao final do arquivo (EOF),
                 // pois estamos lendo a quantidade exata de registros que é reportada
@@ -194,6 +210,7 @@ int main(void)
             for (int i = 0; i < n_queries; i++) {
                 int n_conds;
 
+                // Lê a quantidade de condições de cada query
                 int ret = scanf("%d", &n_conds);
 
                 if (ret != 1)
@@ -216,7 +233,12 @@ int main(void)
                     if (ret != 1 || !data_rec_typeinfo(field_repr, &offset, &info))
                         bail(E_PROCESSINGFILE);
 
+                    // Irá guardar o valor referência para comparação na query
                     void *buf = NULL;
+                    
+                    // Usado para que possamos fazer a leitura de uma string (`T_STR`)
+                    // alocada dinamicamente. Irá apontar para a string alocada dinamicamente
+                    // por `parse_read_field`, nesse caso.
                     char *str;
 
                     // Reserva espaço para guardar o valor que será lido (e posteriormente
@@ -243,6 +265,11 @@ int main(void)
                     if (info == T_STR)
                         buf = str;
 
+                    // Adiciona uma condição de igualdade à query que consiste em:
+                    // 
+                    // Interpretar o valor na posição `offset` da struct `f_data_rec`
+                    // com o tipo dado por `info` e verificar se seu valor é igual ao
+                    // de `buf`, que possui esse mesmo tipo
                     query_add_cond_equals(query, offset, info, buf);
                 }
 

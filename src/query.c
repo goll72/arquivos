@@ -2,11 +2,25 @@
 
 #include "query.h"
 
+/**
+ * As queries foram implementadas como uma lista encadeada
+ * de condições, visto que sempre é necessário percorrer
+ * toda a lista para verificar se as condições passam.
+ *
+ * Dessa forma, não é necessário saber o número de condições
+ * a priori, ao criar a query.
+ */
+ 
 typedef struct query_cond query_cond_t;
 
 struct query_cond {
+    /** Região de memória referência para comparação */
     void *buf;
+
+    /** Offset em bytes da posição de `obj` usada para a comparação com `buf` */
     size_t offset;
+
+    /** Tipo de dado do valor na posição de memória a ser comparada */ 
     enum typeinfo info;
 
     query_cond_t *next;

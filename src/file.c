@@ -8,8 +8,13 @@
     if (x)         \
         return false;
 
+/** Define o valor nulo de um campo de acordo com seu tipo */
 #define NULL_VALUE(x) _Generic(x, char *: NULL, float: -1, uint32_t: -1)
 
+/**
+ * Define como um campo deve ser formatado
+ * ao ser impresso, de acordo com seu tipo
+ */
 #define FMT(x)                 \
     _Generic(x,                \
         char *: "%.*s: %s\n",  \
@@ -20,6 +25,7 @@ void file_init_header(f_header_t *header)
 {
 #define X(T, name, default) .name = default,
 
+    // Inicializa `initial_header` com os valores padrão definidos em "defs.h".
     static const f_header_t initial_header = { HEADER_REC_FIELDS(X) };
 
 #undef X
@@ -31,6 +37,9 @@ bool file_read_header(FILE *f, f_header_t *header)
 {
 #define X(T, name, ...) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
 
+    // Todos os campos do cabeçalho têm tamanho fixo,
+    // logo não precisamos de lógica adicional além
+    // de ler os valores, campo a campo
     HEADER_REC_FIELDS(X)
 
 #undef X
@@ -42,6 +51,7 @@ bool file_write_header(FILE *f, const f_header_t *header)
 {
 #define X(T, name, ...) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
 
+    // Analogamente, para escrita (vd. `file_read_header`)
     HEADER_REC_FIELDS(X)
 
 #undef X
@@ -68,9 +78,18 @@ bool file_write_header(FILE *f, const f_header_t *header)
  */
 static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 {
+    // Se o tamanho restante é 0, o registro atual acabou de ser lido
+    // e quaisquer campos de tamanho variável que ainda não foram lidos
+    // foram omitidos (são ausentes/nulos).
+    //
+    // Isso não indica, necessariamente, um erro; apenas que algum
+    // campo opcional não está presente.
     if (*rem_size == 0)
         return NULL;
 
+    // A posição inicial é guardada para que possamos voltar 
+    // para trás em caso de erro e para que possamos calcular
+    // o tamanho da string lida quando encontrarmos o delimitador.
     long initial = ftell(f);
     int c = fgetc(f);
 
@@ -93,9 +112,11 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     // NOTE: o byte na posição atual do arquivo não foi lido,
     // uma vez que a posição atual é incrementada após a leitura
     //
-    // Ou seja, não faz parte do campo, logo, devemos subtrair 1
+    // Ou seja, esse byte não faz parte do campo, logo, devemos subtrair 1
     int64_t len = current - initial - 1;
 
+    // Se o tamanho da string lida é maior que o tamanho restante do
+    // registro, o registro está errado e a leitura deve falhar
     if (len > *rem_size) {
         *rem_size = -1;
         return NULL;
@@ -179,6 +200,10 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
 #define X(T, name, ...) FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
 #define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name))
 
+    // Escreve os campos de tamanho fixo diretamente, usando `fwrite` (X),
+    // e os campos de tamanho variável usando a função `file_write_var_field`,
+    // passando para essa função o código do campo correspendente presente
+    // no registro de cabeçalho (Y).
     DATA_REC_FIELDS(X, X, Y)
 
 #undef X
@@ -197,7 +222,8 @@ void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
     else                                                       \
         printf(FMT(rec->name), HEADER_DESC_ARGS(name), rec->name);
 
-    // Imprime os campos de dados, usando as descrições presentes no cabeçalho
+    // Imprime os campos de dados, usando as descrições para
+    // cada campo que estão presentes no registro de cabeçalho
     DATA_REC_PRINT_FIELDS(X)
 
 #undef X
