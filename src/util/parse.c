@@ -5,6 +5,12 @@
 
 #include "util/parse.h"
 
+/**
+ * Adiciona o caractere `c` ao buffer `result` (que possui tamanho `*len`, ou seja,
+ * apresenta `*len` bytes ocupados, e capacidade `*cap`), realocando-o conforme
+ * necessário. O caractere delimitador '\0' deve ser adicionado manualmente ao final
+ * da string.
+ */
 static inline char *append_realloc(char *result, size_t *len, size_t *cap, char c)
 {
     if (!result)
@@ -25,10 +31,16 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
 {
     int c;
 
+    // Devemos ler alguns tipos de espaço em branco (' ' e '\t') antes de seguir
+    // para o parsing para que possamos verificar se um campo é nulo ou não.
     do {
         c = fgetc(f);
     } while (c == ' ' || c == '\t');
 
+    // Se um campo for nulo, não devemos chamar a função `fscanf`, uma vez que
+    // essa função "consome" (lê e discarta) todos os caracteres de espaço em branco
+    // que ocorram antes do valor do campo em si, incluindo '\r' e '\n', caracteres
+    // esses usados como delimitador de registro em arquivos CSV.
     bool is_null = (c == '\n' || c == '\r') || (delims && strchr(delims, c));
 
     ungetc(c, f);
@@ -84,7 +96,10 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             while (true) {
                 c = fgetc(f);
 
+                // Chegamos ao fim da string, seja por termos
+                // encontrado aspas duplas ou um delimitador
                 if ((!delims && c == '"') || (delims && strchr(delims, c))) {
+                    // Strings vazias não podem ser lidas, são sempre convertidas em `NULL`
                     if (len == 0) {
                         free(result);
                         result = NULL;
@@ -126,6 +141,7 @@ bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
     do {
         c = fgetc(f);
 
+        // A função `csv_next_record` fará uma checagem mais rigorosa
         if (c == '\r' || c == '\n') {
             ungetc(c, f);
             return true;
@@ -144,6 +160,8 @@ bool csv_next_record(FILE *f, bool *eof)
 
     while (isspace(c)) {
         if (prev == '\r' || c == '\n') {
+            // Tanto "\r\n" quanto '\n' são aceitos como sequências válidas de
+            // delimitadores. '\r' seguido por outro caractere não é válido.
             valid = c == '\n';
 
             c = fgetc(f);

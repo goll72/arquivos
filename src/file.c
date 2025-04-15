@@ -90,8 +90,10 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
     // Tamanho da string, incluindo o delimitador e ignorando o código
     //
-    // NOTE: o byte na posição atual do arquivo não foi lido
-    // (não faz parte do campo), logo, devemos subtrair 1
+    // NOTE: o byte na posição atual do arquivo não foi lido,
+    // uma vez que a posição atual é incrementada após a leitura
+    //
+    // Ou seja, não faz parte do campo, logo, devemos subtrair 1
     int64_t len = current - initial - 1;
 
     if (len > *rem_size) {
@@ -153,8 +155,8 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
 }
 
 /**
- * Escreve a string `data` na posição atual do arquivo `f`,
- * como um campo de tamanho variável, delimitado por '|'.
+ * Escreve a string `data` na posição atual do arquivo `f`, como um campo de
+ * tamanho variável, precedido pelo seu código, `code`, e delimitado por '|'.
  */
 static bool file_write_var_field(FILE *f, uint8_t code, char *data)
 {
