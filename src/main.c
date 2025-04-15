@@ -127,6 +127,8 @@ int main(void)
             if (!file_read_header(f, &header) || header.status != '1')
                 bail(E_PROCESSINGFILE);
 
+            bool no_matches = true;
+
             while (true) {
                 // Devemos inicializar a struct, pois caso a leitura falhe,
                 // é possível que campos de tamanho variável não inicializados
@@ -140,10 +142,15 @@ int main(void)
                 if (rec.removed == '0') {
                     file_print_data_rec(&header, &rec);
                     printf("\n");
+
+                    no_matches = false;
                 }
 
                 free_var_data_fields(&rec);
             }
+
+            if (no_matches)
+                puts(E_NOREC);
 
             fclose(f);
 
