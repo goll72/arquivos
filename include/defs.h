@@ -8,6 +8,12 @@
 
 #include "typeinfo.h"
 
+#define STATUS_INCONSISTENT '0'
+#define STATUS_CONSISTENT   '1'
+
+#define REC_NOT_REMOVED '0'
+#define REC_REMOVED     '1'
+
 /**
  * Define os campos do registro de cabeçalho, de forma
  * que uma X macro pode ser passada como parâmetro para
@@ -23,7 +29,7 @@
  *     default: valor padrão do campo
  */
 #define HEADER_REC_FIELDS(X)                                                      \
-    X(uint8_t,  status,                 '0')                                      \
+    X(uint8_t,  status,                 STATUS_INCONSISTENT)                      \
     X(int64_t,  top,                     -1)                                      \
     X(uint64_t, next_byte_offset,         0)                                      \
     X(uint32_t, n_valid_recs,             0)                                      \

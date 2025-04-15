@@ -96,6 +96,10 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             while (true) {
                 c = fgetc(f);
 
+                // FIXME:
+                //  - talvez "" -> vazia, null/nulo/NULL/NULO -> null
+                //  - consertar documentação
+                //
                 // Chegamos ao fim da string, seja por termos
                 // encontrado aspas duplas ou um delimitador
                 if ((!delims && c == '"') || (delims && strchr(delims, c))) {

@@ -81,7 +81,7 @@ static bool file_read_data_rec_or_bail(
         return false;
     }
 
-    if (rec->removed != '0' && rec->removed != '1')
+    if (rec->removed != REC_REMOVED && rec->removed != REC_NOT_REMOVED)
         bail(E_PROCESSINGFILE);
 
     return true;
@@ -109,7 +109,7 @@ static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
     if (!f)
         bail(E_PROCESSINGFILE);
 
-    if (!file_read_header(f, header) || header->status != '1')
+    if (!file_read_header(f, header) || header->status != STATUS_CONSISTENT)
         bail(E_PROCESSINGFILE);
 
     return f;
@@ -156,7 +156,7 @@ int main(void)
                 if (!file_read_data_rec_or_bail(f, &header, &rec))
                     break;
 
-                if (rec.removed == '0') {
+                if (rec.removed == REC_NOT_REMOVED) {
                     file_print_data_rec(&header, &rec);
                     printf("\n");
 
@@ -191,9 +191,10 @@ int main(void)
             // eficiente do que percorrer o arquivo várias vezes, considerando que
             // serão realizadas várias buscas consecutivamente.
             //
-            // No entanto, a técnica utilizada para implementar a funcionalidade
-            // 2/FUNC_SELECT_STAR (guardar apenas um registro por vez) é preferível
-            // caso o arquivo contenha uma quantidade extremamente alta de registros.
+            // Nota-se, no entanto, que a técnica utilizada para implementar a
+            // funcionalidade 2/FUNC_SELECT_STAR (guardar apenas um registro por vez)
+            // é preferível caso o arquivo contenha uma quantidade extremamente alta
+            // de registros, devido ao seu menor uso de memória.
             for (size_t i = 0; i < n_recs;) {
                 // Espera-se que essa função nunca chegue ao final do arquivo (EOF),
                 // pois estamos lendo a quantidade exata de registros que é reportada
@@ -201,7 +202,7 @@ int main(void)
                 if (!file_read_data_rec_or_bail(f, &header, &recs[i]))
                     bail(E_PROCESSINGFILE);
 
-                if (recs[i].removed == '0')
+                if (recs[i].removed == REC_NOT_REMOVED)
                     i++;
                 else
                     free_var_data_fields(&recs[i]);
