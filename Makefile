@@ -1,6 +1,6 @@
 CC = cc
 
-BUILD = build
+BUILD ?= build
 
 ifeq ($(BUILD),)
 $(error "Define BUILD to a non-empty value")
