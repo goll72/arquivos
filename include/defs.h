@@ -8,100 +8,35 @@
 
 #include "typeinfo.h"
 
+/**
+ * Definições dos registros usados no arquivo e outros metadados.
+ */
+
 #define STATUS_INCONSISTENT '0'
 #define STATUS_CONSISTENT   '1'
 
 #define REC_NOT_REMOVED '0'
 #define REC_REMOVED     '1'
 
-/**
- * Define os campos do registro de cabeçalho, de forma
- * que uma X macro pode ser passada como parâmetro para
- * manipular os campos de forma arbitrária (escrever ou
- * ler cada campo em um arquivo, por exemplo)
- *
- * A X macro passada como argumento tem os seguintes
- * parâmetros:
- *
- * X(T, name, default)
- *     T: tipo do campo
- *     name: nome do campo
- *     default: valor padrão do campo
- */
-#define HEADER_REC_FIELDS(X)                                                      \
-    X(uint8_t,  status,                 STATUS_INCONSISTENT)                      \
-    X(int64_t,  top,                     -1)                                      \
-    X(uint64_t, next_byte_offset,         0)                                      \
-    X(uint32_t, n_valid_recs,             0)                                      \
-    X(uint32_t, n_removed_recs,           0)                                      \
-    X(char[23], attack_id_desc,         "IDENTIFICADOR DO ATAQUE")                \
-    X(char[27], year_desc,              "ANO EM QUE O ATAQUE OCORREU")            \
-    X(char[28], financial_loss_desc,    "PREJUIZO CAUSADO PELO ATAQUE")           \
-    X(uint8_t,  country_code,           '1')                                      \
-    X(char[26], country_desc,           "PAIS ONDE OCORREU O ATAQUE")             \
-    X(uint8_t,  attack_type_code,       '2')                                      \
-    X(char[38], attack_type_desc,       "TIPO DE AMEACA A SEGURANCA CIBERNETICA") \
-    X(uint8_t,  target_industry_code,   '3')                                      \
-    X(char[38], target_industry_desc,   "SETOR DA INDUSTRIA QUE SOFREU O ATAQUE") \
-    X(uint8_t,  defense_mechanism_code, '4')                                      \
-    X(char[67], defense_mechanism_desc, "ESTRATEGIA DE DEFESA CIBERNETICA EMPREGADA PARA RESOLVER O PROBLEMA")
-
-/**
- * Define os campos do registro de dados, de forma
- * que a macro `X` pode ser usada para manipular os
- * campos de metadados de tamanho fixo, a macro `Y`
- * para manipular os campos de dados de tamanho fixo
- * e a macro `Z` para os campos de tamanho variável.
- * As macros passadas como argumento recebem os
- * seguintes parâmetros:
- *
- * X(T, name, _)
- *     T: tipo do campo
- *     name: nome do campo
- *     _: ignorado
- *
- * Y/Z(T, name, repr)
- *     T: tipo do campo
- *     name: nome do campo
- *     repr: string usada para representar o campo
- */
-#define DATA_REC_FIELDS(X, Y, Z)                     \
-    X(uint8_t,  removed,           _)                \
-    X(uint32_t, size,              _)                \
-    X(int64_t,  next_removed_rec,  _)                \
-    Y(uint32_t, attack_id,         "idAttack")       \
-    Y(uint32_t, year,              "year")           \
-    Y(float,    financial_loss,    "financialLoss")  \
-    Z(char *,   country,           "country")        \
-    Z(char *,   attack_type,       "attackType")     \
-    Z(char *,   target_industry,   "targetIndustry") \
-    Z(char *,   defense_mechanism, "defenseMechanism")
-
-/**
- * Define os campos de dados do registro de dados, na
- * ordem em que devem ser impressos. A macro `X`
- * passada como parâmetro pode ser usada para manipular
- * esses campos, nessa ordem.
- */
-#define DATA_REC_PRINT_FIELDS(X) \
-    X(attack_id)                 \
-    X(year)                      \
-    X(country)                   \
-    X(target_industry)           \
-    X(attack_type)               \
-    X(financial_loss)            \
-    X(defense_mechanism)
-
 /* Define a X macro que define os campos da struct */
 #define X(T, name, ...) typeof(T) name;
 #define Y(...)
 
+#define HEADER_FIELD   X
+
+/**
+ * Registro de cabeçalho (representação na memória primária)
+ */
 typedef struct {
-    HEADER_REC_FIELDS(X)
+    #include "x/header.h"
 } f_header_t;
 
+#define METADATA_FIELD X
+#define FIXED_FIELD    X
+#define VAR_FIELD      X
+
 typedef struct {
-    DATA_REC_FIELDS(X, X, X)
+    #include "x/data.h"
 } f_data_rec_t;
 
 /**
@@ -118,12 +53,15 @@ typedef struct {
 #define PACKED(T) packed_##T
 
 typedef struct {
-    HEADER_REC_FIELDS(X)
+    #include "x/header.h"
 } __attribute__((packed)) PACKED(f_header_t);
 
 /* Apenas os campos de tamanho fixo */
+#define METADATA_FIELD X
+#define FIXED_FIELD    X
+
 typedef struct {
-    DATA_REC_FIELDS(X, X, Y)
+    #include "x/data.h"
 } __attribute__((packed)) PACKED(f_data_rec_t);
 
 #undef X
@@ -150,15 +88,16 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
     if (!field_repr)
         return false;
     
-#define X(T, name, repr)                        \
-    if (strcmp(field_repr, repr) == 0) {        \
-        *offset = offsetof(f_data_rec_t, name); \
-        *info = GET_TYPEINFO(T);                \
-                                                \
-        return true;                            \
-    }
+    #define X(T, name, repr)                        \
+        if (strcmp(field_repr, repr) == 0) {        \
+            *offset = offsetof(f_data_rec_t, name); \
+            *info = GET_TYPEINFO(T);                \
+                                                    \
+            return true;                            \
+        }
 
-#define Y(...)
+    #define FIXED_FIELD X
+    #define VAR_FIELD   X
 
     // `field_repr` é comparado, um a um, com o valor de `repr` para cada um
     // dos campos até que seja encontrado um valor correspondente. Ou seja,
@@ -166,10 +105,9 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
     // quantidade de strings (campos definidos no registro).
     //
     // É possível usar um hashmap para realizar a busca em O(1).
-    DATA_REC_FIELDS(Y, X, X)
+    #include "x/data.h"
     
-#undef X
-#undef Y
+    #undef X
 
     return false;
 }

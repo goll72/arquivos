@@ -23,38 +23,34 @@
 
 void file_init_header(f_header_t *header)
 {
-#define X(T, name, default) .name = default,
+    #define HEADER_FIELD(T, name, default) .name = default,
 
     // Inicializa `initial_header` com os valores padrão definidos em "defs.h".
-    static const f_header_t initial_header = { HEADER_REC_FIELDS(X) };
-
-#undef X
+    static const f_header_t initial_header = {
+        #include "x/header.h"
+    };
 
     memcpy(header, &initial_header, sizeof initial_header);
 }
 
 bool file_read_header(FILE *f, f_header_t *header)
 {
-#define X(T, name, ...) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
+    #define HEADER_FIELD(T, name, ...) FAIL_IF(fread(&header->name, sizeof(T), 1, f) != 1)
 
     // Todos os campos do cabeçalho têm tamanho fixo,
     // logo não precisamos de lógica adicional além
     // de ler os valores, campo a campo
-    HEADER_REC_FIELDS(X)
-
-#undef X
+    #include "x/header.h"
 
     return true;
 }
 
 bool file_write_header(FILE *f, const f_header_t *header)
 {
-#define X(T, name, ...) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
+    #define HEADER_FIELD(T, name, ...) FAIL_IF(fwrite(&header->name, sizeof(T), 1, f) != 1)
 
     // Analogamente, para escrita (vd. `file_read_header`)
-    HEADER_REC_FIELDS(X)
-
-#undef X
+    #include "x/header.h"
 
     return true;
 }
@@ -147,14 +143,16 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
 bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
 {
-#define X(T, name, ...) FAIL_IF(fread(&rec->name, sizeof(T), 1, f) != 1)
-#define Y(T, name, ...)                                                 \
-    rec->name = file_read_var_field(f, header->name##_code, &rem_size); \
-    FAIL_IF(rem_size < 0)
-#define Z(...)
+    #define X(T, name, ...) FAIL_IF(fread(&rec->name, sizeof(T), 1, f) != 1)
+    #define Y(T, name, ...)                                                 \
+        rec->name = file_read_var_field(f, header->name##_code, &rem_size); \
+        FAIL_IF(rem_size < 0)
+
+    #define METADATA_FIELD X
+    #define FIXED_FIELD    X
 
     // Lê apenas os campos de tamanho fixo
-    DATA_REC_FIELDS(X, X, Z)
+    #include "x/data.h"
 
     // Calcula o tamanho do restante do registro com base no tamanho
     // presente no arquivo, que inclui os campos de tamanho fixo após
@@ -166,11 +164,12 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
     // NOTE: um registro pode omitir campos de tamanho variável. Nesse
     // caso, a tentativa de leitura de um campo ausente irá "falhar",
     // porém esse campo irá receber o valor `NULL`, como esperado.
-    DATA_REC_FIELDS(Z, Z, Y)
+    #define VAR_FIELD Y
 
-#undef X
-#undef Y
-#undef Z
+    #include "x/data.h"
+
+    #undef X
+    #undef Y
 
     return rem_size == 0;
 }
@@ -197,36 +196,38 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
 
 bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *rec)
 {
-#define X(T, name, ...) FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
-#define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name))
+    #define X(T, name, ...) FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
+    #define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name))
+
+    #define METADATA_FIELD X
+    #define FIXED_FIELD    X
+    #define VAR_FIELD      Y
 
     // Escreve os campos de tamanho fixo diretamente, usando `fwrite` (X),
     // e os campos de tamanho variável usando a função `file_write_var_field`,
     // passando para essa função o código do campo correspendente presente
     // no registro de cabeçalho (Y).
-    DATA_REC_FIELDS(X, X, Y)
+    #include "x/data.h"
 
-#undef X
-#undef Y
+    #undef X
+    #undef Y
 
     return true;
 }
 
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {
-#define HEADER_DESC_ARGS(name) (int)sizeof header->name##_desc, header->name##_desc
+    #define HEADER_DESC_ARGS(name) (int)sizeof header->name##_desc, header->name##_desc
 
-#define X(name)                                                \
-    if (rec->name == NULL_VALUE(rec->name))                    \
-        printf("%.*s: NADA CONSTA\n", HEADER_DESC_ARGS(name)); \
-    else                                                       \
-        printf(FMT(rec->name), HEADER_DESC_ARGS(name), rec->name);
+    #define DATA_FIELD(name)                                       \
+        if (rec->name == NULL_VALUE(rec->name))                    \
+            printf("%.*s: NADA CONSTA\n", HEADER_DESC_ARGS(name)); \
+        else                                                       \
+            printf(FMT(rec->name), HEADER_DESC_ARGS(name), rec->name);
 
     // Imprime os campos de dados, usando as descrições para
     // cada campo que estão presentes no registro de cabeçalho
-    DATA_REC_PRINT_FIELDS(X)
+    #include "x/data-print.h"
 
-#undef X
-
-#undef HEADER_DESC_ARGS
+    #undef HEADER_DESC_ARGS
 }

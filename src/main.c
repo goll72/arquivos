@@ -26,13 +26,9 @@ enum functionality {
  */
 static void free_var_data_fields(f_data_rec_t *rec)
 {
-#define X(...)
-#define Y(T, name, ...) free(rec->name);
+    #define VAR_FIELD(T, name, ...) free(rec->name);
 
-    DATA_REC_FIELDS(X, X, Y)
-
-#undef X
-#undef Y
+    #include "x/data.h"
 }
 
 /* clang-format on */
