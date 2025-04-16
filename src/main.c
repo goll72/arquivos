@@ -137,18 +137,18 @@ int main(void)
             if (!csv_f || !bin_f)
                 bail(E_PROCESSINGFILE);
 
-#define X(T, name, ...)                      \
-    if (!csv_read_field(csv_f, T_STR, NULL)) \
-        bail(E_PROCESSINGFILE);
+            #define X(T, name, ...)                      \
+                if (!csv_read_field(csv_f, T_STR, NULL)) \
+                    bail(E_PROCESSINGFILE);
 
-#define Y(...)
+            #define FIXED_FIELD X
+            #define VAR_FIELD   X
 
             // Pula os campos de descrição presentes no arquivo CSV
             // (realiza a leitura, porém não guarda os dados lidos)
-            DATA_REC_FIELDS(Y, X, X)
+            #include "x/data.h"
 
-#undef X
-#undef Y
+            #undef X
 
             f_header_t header;
             file_init_header(&header);
@@ -171,17 +171,15 @@ int main(void)
                     .next_removed_rec = -1,
                 };
 
-#define READ_COMMON(T, name)                                \
-    if (!csv_read_field(csv_f, GET_TYPEINFO(T), &rec.name)) \
-        bail(E_PROCESSINGFILE);
+                #define READ_COMMON(T, name)                                \
+                    if (!csv_read_field(csv_f, GET_TYPEINFO(T), &rec.name)) \
+                        bail(E_PROCESSINGFILE);
 
-#define X(T, name, ...) READ_COMMON(T, name)
+                #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
 
-#define Y(T, name, ...)  \
-    READ_COMMON(T, name) \
-    rec.size += rec.name ? strlen(rec.name) + 2 : 0;
-
-#define Z(...)
+                #define VAR_FIELD(T, name, ...)  \
+                    READ_COMMON(T, name) \
+                    rec.size += rec.name ? strlen(rec.name) + 2 : 0;
 
                 // Ignora os campos de metadados (Z) e lê os valores dos campos
                 // de tamanho fixo e variável, em ordem, a partir do arquivo
@@ -191,11 +189,7 @@ int main(void)
                 // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
                 // tamanho da string devido ao código do campo e ao delimitador,
                 // que ocupam 1 byte cada
-                DATA_REC_FIELDS(Z, X, Y)
-
-#undef X
-#undef Y
-#undef Z
+                #include "x/data.h"
 
 #undef READ_COMMON
 
