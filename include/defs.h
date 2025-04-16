@@ -25,7 +25,7 @@
 #define HEADER_FIELD   X
 
 /**
- * Registro de cabeçalho (representação na memória primária)
+ * Registro de cabeçalho (representação em memória primária)
  */
 typedef struct {
     #include "x/header.h"
@@ -35,6 +35,9 @@ typedef struct {
 #define FIXED_FIELD    X
 #define VAR_FIELD      X
 
+/**
+ * Registro de dados (representação em memória primária)
+ */
 typedef struct {
     #include "x/data.h"
 } f_data_rec_t;

@@ -83,8 +83,27 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             if (!delims) {
                 c = fgetc(f);
 
-                if (c != '"')
+                if (c != '"') {
+                    char buf[5] = {};
+                    char *ptr = buf;
+
+                    // Lê no máximo 4 caracteres para verificar se a string lida corresponde a um valor "null"
+                    do {
+                        *ptr++ = tolower(c);
+                        c = fgetc(f);
+                    } while (isalpha(c) && ptr != &buf[sizeof buf - 1]);
+
+                    *ptr = '\0';
+
+                    if (!strcmp(buf, "nil") || !strcmp(buf, "null") || !strcmp(buf, "nulo")) {
+                        if (dest)
+                            memcpy(dest, &result, sizeof result);
+
+                        break;
+                    }
+
                     return false;
+                }
             }
 
             size_t cap = 8;
@@ -96,15 +115,10 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             while (true) {
                 c = fgetc(f);
 
-                // FIXME:
-                //  - talvez "" -> vazia, null/nulo/NULL/NULO -> null
-                //  - consertar documentação
-                //
-                // Chegamos ao fim da string, seja por termos
-                // encontrado aspas duplas ou um delimitador
                 if ((!delims && c == '"') || (delims && strchr(delims, c))) {
-                    // Strings vazias não podem ser lidas, são sempre convertidas em `NULL`
-                    if (len == 0) {
+                    // Não é possível ler strings vazias usando delimitadores,
+                    // essas strings são convertidas para `NULL`
+                    if (delims && len == 0) {
                         free(result);
                         result = NULL;
                     }

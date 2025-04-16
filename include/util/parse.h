@@ -36,9 +36,11 @@
  *
  * Campos do tipo `T_U32` e `T_FLT` serão inicializados com
  * `UINT_MAX` (equivalente a `(uint32_t) -1`) e `-1.f`,
- * respectivamente, nesse caso. Não é possível ler uma string
- * vazia: as sequências <delim> (se `!quoted`) e ["] ["]
- * (se `quoted`) são ambas interpretadas como `NULL`.
+ * respectivamente, nesse caso. Para ler uma string vazia, é
+ * necessário que `delims` seja `NULL`. Além disso, para ler
+ * uma string "nula" se `delims` for `NULL`, os valores `nil`,
+ * `null` ou `nulo` podem ser usados, sem aspas (maiúsculo ou
+ * minúsculo).
  *
  * Retorna `false` se a leitura falhar.
  */
