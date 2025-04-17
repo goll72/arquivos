@@ -166,7 +166,7 @@ int main(void)
                     break;
 
                 f_data_rec_t rec = {
-                    .removed = '0',
+                    .removed = REC_NOT_REMOVED,
                     .size = DATA_REC_SIZE_AFTER_SIZE_FIELD,
                     .next_removed_rec = -1,
                 };
@@ -178,20 +178,20 @@ int main(void)
                 #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
 
                 #define VAR_FIELD(T, name, ...)  \
-                    READ_COMMON(T, name) \
+                    READ_COMMON(T, name)         \
                     rec.size += rec.name ? strlen(rec.name) + 2 : 0;
 
-                // Ignora os campos de metadados (Z) e lê os valores dos campos
+                // Ignora os campos de metadados e lê os valores dos campos
                 // de tamanho fixo e variável, em ordem, a partir do arquivo
                 // CSV, atualizando o tamanho do registro de acordo com o
-                // tamanho de cada campo de tamanho variável (Y).
+                // tamanho de cada campo de tamanho variável.
                 //
                 // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
                 // tamanho da string devido ao código do campo e ao delimitador,
                 // que ocupam 1 byte cada
                 #include "x/data.h"
 
-#undef READ_COMMON
+                #undef READ_COMMON
 
                 if (!file_write_data_rec(bin_f, &header, &rec))
                     bail(E_PROCESSINGFILE);
@@ -204,7 +204,7 @@ int main(void)
             header.next_byte_offset = ftell(bin_f);
 
             // Marca o arquivo como "limpo"/consistente
-            header.status = '1';
+            header.status = STATUS_CONSISTENT;
 
             // Escreve o header após realizar as modificações
             fseek(bin_f, 0, SEEK_SET);
@@ -348,7 +348,7 @@ int main(void)
 
                     // Adiciona uma condição de igualdade à query que consiste em:
                     // 
-                    // Interpretar o valor na posição `offset` da struct `f_data_rec`
+                    // Interpretar o valor na posição `offset` da struct `f_data_rec_t`
                     // com o tipo dado por `info` e verificar se seu valor é igual ao
                     // de `buf`, que possui esse mesmo tipo
                     query_add_cond_equals(query, offset, info, buf);
