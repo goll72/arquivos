@@ -10,7 +10,9 @@
 
 /**
  * Inicializa o registro de cabeçalho `header` com os
- * valores padrão para um arquivo vazio.
+ * valores padrão para um arquivo vazio. Os valores
+ * iniciais para os campos de descrição não são
+ * necessariamente válidos e devem ser sobrescritos.
  */
 void file_init_header(f_header_t *header);
 

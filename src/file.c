@@ -21,6 +21,19 @@
         float: "%.*s: %.2f\n", \
         uint32_t: "%.*s: %" PRIu32 "\n")
 
+/**
+ * Calcula o tamanho de uma string armazenada em um campo de
+ * tamanho fixo no arquivo, usando para isso o fato de que a
+ * primeira ocorrência do caractere '$' (cifrão/lixo) indica
+ * o término da string.
+ *
+ * Se o caractere '$' não estiver presente na string (`memchr`
+ * irá retornar `NULL`), a string está ocupando todo o espaço
+ * disponível no campo.
+ */
+#define LEN_FIXED_STR(s) \
+    (((char *)memchr(s, '$', sizeof s) ?: &s[sizeof s]) - s)
+
 /* clang-format off */
 
 void file_init_header(f_header_t *header)
@@ -227,7 +240,7 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
 
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {
-    #define HEADER_DESC_ARGS(name) (int)sizeof header->name##_desc, header->name##_desc
+    #define HEADER_DESC_ARGS(name) (int)LEN_FIXED_STR(header->name##_desc), header->name##_desc
 
     #define DATA_FIELD(name)                                       \
         if (rec->name == NULL_VALUE(rec->name))                    \

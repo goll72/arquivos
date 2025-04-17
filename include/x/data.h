@@ -41,25 +41,25 @@ METADATA_FIELD(uint32_t, size,              _)
 METADATA_FIELD(int64_t,  next_removed_rec,  _)
 
 /** Identificador do ataque. */
-FIXED_FIELD(uint32_t, attack_id,         "idAttack")
+FIXED_FIELD(uint32_t,    attack_id,         "idAttack")
 
 /** Ano em que o ataque ocorreu. */
-FIXED_FIELD(uint32_t, year,              "year")
+FIXED_FIELD(uint32_t,    year,              "year")
 
 /** Prejuízo causado pelo ataque. */
-FIXED_FIELD(float,    financial_loss,    "financialLoss")
+FIXED_FIELD(float,       financial_loss,    "financialLoss")
 
 /** País em que o ataque ocorreu. */
-VAR_FIELD(char *,   country,           "country")
+VAR_FIELD(char *,        country,           "country")
 
 /** Tipo de ataque cibernético. */
-VAR_FIELD(char *,   attack_type,       "attackType")
+VAR_FIELD(char *,        attack_type,       "attackType")
 
 /** Setor da indústria afetado. */
-VAR_FIELD(char *,   target_industry,   "targetIndustry")
+VAR_FIELD(char *,        target_industry,   "targetIndustry")
 
 /** Mecanismo de defesa empregado para resolver o problema. */
-VAR_FIELD(char *,   defense_mechanism, "defenseMechanism")
+VAR_FIELD(char *,        defense_mechanism, "defenseMechanism")
 
 #undef METADATA_FIELD
 #undef FIXED_FIELD

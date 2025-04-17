@@ -137,25 +137,41 @@ int main(void)
             if (!csv_f || !bin_f)
                 bail(E_PROCESSINGFILE);
 
+            f_header_t header;
+            file_init_header(&header);
+
+            char *header_desc;
+            size_t header_desc_len;
+
             /* clang-format off */
 
-            #define X(T, name, ...)                      \
-                if (!csv_read_field(csv_f, T_STR, NULL)) \
-                    bail(E_PROCESSINGFILE);
+            #define X(T, name, ...)                                              \
+                if (!csv_read_field(csv_f, T_STR, &header_desc) || !header_desc) \
+                    bail(E_PROCESSINGFILE);                                      \
+                                                                                 \
+                header_desc_len = strlen(header_desc);                           \
+                                                                                 \
+                if (header_desc_len > sizeof header.name##_desc)                 \
+                    bail(E_PROCESSINGFILE);                                      \
+                                                                                 \
+                memcpy(&header.name##_desc, header_desc, header_desc_len);       \
+                free(header_desc);                                               \
+                memset(&header.name##_desc[header_desc_len], '$', sizeof header.name##_desc - header_desc_len);
 
             #define FIXED_FIELD X
             #define VAR_FIELD   X
 
-            // Pula os campos de descrição presentes no arquivo CSV
-            // (realiza a leitura, porém não guarda os dados lidos)
+            // Lê os campos de descrição presentes no arquivo CSV e
+            // os armazena nos campos de descrição do registro de cabeçalho,
+            // abortando a execução do programa se a leitura falhar ou se o
+            // campo exceder o tamanho máximo permitido. Se o campo lido do
+            // arquivo CSV for menor que o campo correspondente de descrição
+            // no arquivo binário, cifrões são adicionados ao final do campo.
             #include "x/data.h"
 
             #undef X
 
             /* clang-format on */
-
-            f_header_t header;
-            file_init_header(&header);
 
             if (!file_write_header(bin_f, &header))
                 bail(E_PROCESSINGFILE);
@@ -187,10 +203,12 @@ int main(void)
                     READ_COMMON(T, name)        \
                     rec.size += rec.name ? strlen(rec.name) + 2 : 0;
 
-                // Ignora os campos de metadados e lê os valores dos campos
-                // de tamanho fixo e variável, em ordem, a partir do arquivo
-                // CSV, atualizando o tamanho do registro de acordo com o
-                // tamanho de cada campo de tamanho variável.
+                // Ignora os campos de metadados (uma vez que esses campos não
+                // são lidos do arquivo, mas sim inicializados pelo programa),
+                // e lê os valores dos campos de tamanho fixo e variável,
+                // em ordem, a partir do arquivo CSV, atualizando o tamanho do
+                // registro de acordo com o tamanho de cada campo de tamanho
+                // variável.
                 //
                 // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
                 // tamanho da string devido ao código do campo e ao delimitador,
