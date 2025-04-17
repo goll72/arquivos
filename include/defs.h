@@ -18,9 +18,15 @@
 #define REC_NOT_REMOVED '0'
 #define REC_REMOVED     '1'
 
+/* clang-format off */
+
+
+/**
+ * Definições de structs usadas.
+ */
+
 /* Define a X macro que define os campos da struct */
 #define X(T, name, ...) typeof(T) name;
-#define Y(...)
 
 #define HEADER_FIELD   X
 
@@ -55,6 +61,8 @@ typedef struct {
  */
 #define PACKED(T) packed_##T
 
+#define HEADER_FIELD   X
+
 typedef struct {
     #include "x/header.h"
 } __attribute__((packed)) PACKED(f_header_t);
@@ -68,7 +76,7 @@ typedef struct {
 } __attribute__((packed)) PACKED(f_data_rec_t);
 
 #undef X
-#undef Y
+
 
 /**
  * Tamanho da parte de tamanho fixa do registro de dados
@@ -78,6 +86,7 @@ typedef struct {
  */
 #define DATA_REC_SIZE_AFTER_SIZE_FIELD \
     (sizeof(PACKED(f_data_rec_t)) - offsetof(PACKED(f_data_rec_t), size) - sizeof(((PACKED(f_data_rec_t) *)0)->size))
+
 
 /**
  * Escreve em `*offset` e `*info`, respectivamente, o offset
@@ -109,7 +118,7 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
     //
     // É possível usar um hashmap para realizar a busca em O(1).
     #include "x/data.h"
-    
+
     #undef X
 
     return false;

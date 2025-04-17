@@ -5,6 +5,9 @@
 
 #include "util/parse.h"
 
+#define IS_NULL_STR_VALUE(buf) \
+    !strcmp(buf, "nil") || !strcmp(buf, "null") || !strcmp(buf, "nulo")
+
 /**
  * Adiciona o caractere `c` ao buffer `result` (que possui tamanho `*len`, ou seja,
  * apresenta `*len` bytes ocupados, e capacidade `*cap`), realocando-o conforme
@@ -87,7 +90,8 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
                     char buf[5] = {};
                     char *ptr = buf;
 
-                    // Lê no máximo 4 caracteres para verificar se a string lida corresponde a um valor "null"
+                    // Lê no máximo 4 caracteres para verificar se
+                    // a string lida corresponde a um valor "null"
                     do {
                         *ptr++ = tolower(c);
                         c = fgetc(f);
@@ -95,7 +99,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
 
                     *ptr = '\0';
 
-                    if (!strcmp(buf, "nil") || !strcmp(buf, "null") || !strcmp(buf, "nulo")) {
+                    if (IS_NULL_STR_VALUE(buf)) {
                         if (dest)
                             memcpy(dest, &result, sizeof result);
 

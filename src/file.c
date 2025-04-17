@@ -21,6 +21,8 @@
         float: "%.*s: %.2f\n", \
         uint32_t: "%.*s: %" PRIu32 "\n")
 
+/* clang-format off */
+
 void file_init_header(f_header_t *header)
 {
     #define HEADER_FIELD(T, name, default) .name = default,
@@ -55,6 +57,8 @@ bool file_write_header(FILE *f, const f_header_t *header)
     return true;
 }
 
+/* clang-format on */
+
 /**
  * Lê um campo de tamanho variável (uma string delimitada por '|', onde o
  * primeiro byte deve ser o código `code` do campo) a partir da posição atual
@@ -83,7 +87,7 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
     if (*rem_size == 0)
         return NULL;
 
-    // A posição inicial é guardada para que possamos voltar 
+    // A posição inicial é guardada para que possamos voltar
     // para trás em caso de erro e para que possamos calcular
     // o tamanho da string lida quando encontrarmos o delimitador.
     long initial = ftell(f);
@@ -132,7 +136,7 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
         free(data);
         return NULL;
     }
-        
+
     data[len - 1] = '\0';
 
     // Inclui o código no cálculo do tamanho restante do registro
@@ -140,6 +144,8 @@ static char *file_read_var_field(FILE *f, uint8_t code, int64_t *rem_size)
 
     return data;
 }
+
+/* clang-format off */
 
 bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
 {
@@ -174,6 +180,8 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
     return rem_size == 0;
 }
 
+/* clang-format on */
+
 /**
  * Escreve a string `data` na posição atual do arquivo `f`, como um campo de
  * tamanho variável, precedido pelo seu código, `code`, e delimitado por '|'.
@@ -193,6 +201,8 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
 
     return status;
 }
+
+/* clang-format off */
 
 bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *rec)
 {

@@ -137,7 +137,7 @@ int main(void)
         }
         case FUNC_SELECT_STAR: {
             f_header_t header;
-            
+
             FILE *f = file_open_from_stdin_or_bail(&header, "rb");
 
             bool no_matches = true;
@@ -174,7 +174,7 @@ int main(void)
             f_header_t header;
 
             FILE *f = file_open_from_stdin_or_bail(&header, "rb");
-            
+
             int ret = scanf("%d", &n_queries);
 
             if (ret != 1)
@@ -232,10 +232,10 @@ int main(void)
 
                     // Irá guardar o valor referência para comparação na query
                     void *buf = NULL;
-                    
+
                     // Usado para que possamos fazer a leitura de uma string (`T_STR`)
-                    // alocada dinamicamente. Irá apontar para a string alocada dinamicamente
-                    // por `parse_read_field`, nesse caso.
+                    // alocada dinamicamente. Irá apontar para a string alocada
+                    // dinamicamente por `parse_read_field`, nesse caso.
                     char *str;
 
                     // Reserva espaço para guardar o valor que será lido (e posteriormente
