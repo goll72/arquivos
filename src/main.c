@@ -110,7 +110,7 @@ static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
 
     return f;
 }
- 
+
 int main(void)
 {
     int func;
@@ -137,6 +137,8 @@ int main(void)
             if (!csv_f || !bin_f)
                 bail(E_PROCESSINGFILE);
 
+            /* clang-format off */
+
             #define X(T, name, ...)                      \
                 if (!csv_read_field(csv_f, T_STR, NULL)) \
                     bail(E_PROCESSINGFILE);
@@ -149,6 +151,8 @@ int main(void)
             #include "x/data.h"
 
             #undef X
+
+            /* clang-format on */
 
             f_header_t header;
             file_init_header(&header);
@@ -171,14 +175,16 @@ int main(void)
                     .next_removed_rec = -1,
                 };
 
+                /* clang-format off */
+
                 #define READ_COMMON(T, name)                                \
                     if (!csv_read_field(csv_f, GET_TYPEINFO(T), &rec.name)) \
                         bail(E_PROCESSINGFILE);
 
                 #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
 
-                #define VAR_FIELD(T, name, ...)  \
-                    READ_COMMON(T, name)         \
+                #define VAR_FIELD(T, name, ...) \
+                    READ_COMMON(T, name)        \
                     rec.size += rec.name ? strlen(rec.name) + 2 : 0;
 
                 // Ignora os campos de metadados e lê os valores dos campos
@@ -192,6 +198,8 @@ int main(void)
                 #include "x/data.h"
 
                 #undef READ_COMMON
+
+                /* clang-format on */
 
                 if (!file_write_data_rec(bin_f, &header, &rec))
                     bail(E_PROCESSINGFILE);
@@ -347,7 +355,7 @@ int main(void)
                         buf = str;
 
                     // Adiciona uma condição de igualdade à query que consiste em:
-                    // 
+                    //
                     // Interpretar o valor na posição `offset` da struct `f_data_rec_t`
                     // com o tipo dado por `info` e verificar se seu valor é igual ao
                     // de `buf`, que possui esse mesmo tipo
