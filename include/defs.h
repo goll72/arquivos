@@ -99,17 +99,21 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
 {
     if (!field_repr)
         return false;
-    
-    #define X(T, name, repr)                        \
-        if (strcmp(field_repr, repr) == 0) {        \
-            *offset = offsetof(f_data_rec_t, name); \
-            *info = GET_TYPEINFO(T);                \
-                                                    \
-            return true;                            \
-        }
+
+    #define X(T, name, repr) { repr, offsetof(f_data_rec_t, name), GET_TYPEINFO(T) },
 
     #define FIXED_FIELD X
     #define VAR_FIELD   X
+
+    static const struct {
+        char *repr;
+        size_t offset;
+        enum typeinfo info;
+    } info_arr[] = {
+        #include "x/data.h"
+    };
+
+    #undef X
 
     // `field_repr` é comparado, um a um, com o valor de `repr` para cada um
     // dos campos até que seja encontrado um valor correspondente. Ou seja,
@@ -117,9 +121,14 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
     // quantidade de strings (campos definidos no registro).
     //
     // É possível usar um hashmap para realizar a busca em O(1).
-    #include "x/data.h"
+    for (int i = 0; i < sizeof info_arr / sizeof info_arr[0]; i++) {
+        if (strcmp(field_repr, info_arr[i].repr) == 0) {
+            *offset = info_arr[i].offset;
+            *info = info_arr[i].info;
 
-    #undef X
+            return true;
+        }
+    }
 
     return false;
 }
