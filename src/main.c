@@ -132,7 +132,7 @@ int main(void)
                 bail(E_PROCESSINGFILE);
 
             FILE *csv_f = fopen(csv_path, "r");
-            FILE *bin_f = fopen(bin_path, "w+");
+            FILE *bin_f = fopen(bin_path, "wb+");
 
             if (!csv_f || !bin_f)
                 bail(E_PROCESSINGFILE);
