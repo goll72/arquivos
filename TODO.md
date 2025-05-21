@@ -9,8 +9,13 @@
        registro-a-registro, reutilizando código da funcionalidade
        FUNC_SELECT_STAR.
 
+ - [ ] Parar a busca antecipadamente se o campo buscado for `attack_id`
+       e um registro com aquele ID já foi encontrado.
+
  - [ ] Usar apenas `NULO` para representar valores nulos no código de
        parsing de strings
 
        > A entrada `NULO` é válida para campos de tamanho fixo ou apenas
        > campos de tamanho variável?
+
+ - [ ] `parse.c`: adicionar comentários
