@@ -32,6 +32,10 @@ bool file_write_header(FILE *f, const f_header_t *header);
  * Lê um registro de dados a partir da posição atual no arquivo
  * `f` e armazena-o em `rec`, usando os códigos para os campos de
  * tamanho variável definidos no registro de cabeçalho `header`.
+ *
+ * Antes de usar os demais campos do registro, deve-se verificar o valor
+ * do campo `removed`: se for `REC_REMOVED`, os outros campos não foram
+ * lidos (não devem ser acessados).
  */
 bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec);
 

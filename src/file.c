@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
+#include "defs.h"
 #include "file.h"
 
 #define FAIL_IF(x) \
@@ -168,10 +169,18 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
         FAIL_IF(rem_size < 0)
 
     #define METADATA_FIELD X
-    #define FIXED_FIELD    X
 
-    // Lê apenas os campos de tamanho fixo
+    // Lê apenas os campos de metadados: se o registro for removido, pula
+    // para o final do registro, sem ler os dados
     #include "x/data.h"
+
+    if (rec->removed == REC_REMOVED) {
+        fseek(f, rec->size - DATA_REC_SIZE_AFTER_SIZE_FIELD, SEEK_CUR);
+        return true;
+    }
+
+    // Lê apenas os campos de dados
+    #define FIXED_FIELD X
 
     // Calcula o tamanho do restante do registro com base no tamanho
     // presente no arquivo, que inclui os campos de tamanho fixo após

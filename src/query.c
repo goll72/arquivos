@@ -39,6 +39,7 @@ void query_free(query_t *query)
 {
     query_cond_t *prev = NULL;
 
+    // Percorre a lista, desalocando cada nó percorrido.
     for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
         if (prev) {
             free(prev->buf);
@@ -48,8 +49,10 @@ void query_free(query_t *query)
         prev = cond;
     }
 
-    free(prev->buf);
-    free(prev);
+    if (prev) {
+        free(prev->buf);
+        free(prev);
+    }
 
     free(query);
 }
@@ -109,6 +112,7 @@ bool query_matches(query_t *query, const void *obj)
                 // dereferenciá-lo.
                 memcpy(&str, buf, sizeof str);
 
+                // Se ambas as strings forem `NULL`, são iguais
                 if (!str && !cond->buf)
                     continue;
 

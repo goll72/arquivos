@@ -5,8 +5,7 @@
 
 #include "util/parse.h"
 
-#define IS_NULL_STR_VALUE(buf) \
-    !strcmp(buf, "nil") || !strcmp(buf, "null") || !strcmp(buf, "nulo")
+#define IS_NULL_STR_VALUE(buf) !strcmp(buf, "nulo")
 
 /**
  * Adiciona o caractere `c` ao buffer `result` (que possui tamanho `*len`, ou seja,
@@ -19,6 +18,8 @@ static inline char *append_realloc(char *result, size_t *len, size_t *cap, char 
     if (!result)
         return NULL;
 
+    // Se não houver mais espaço na string, realoca usando a estratégia de
+    // dobrar o tamanho (complexidade de tempo amortizada linear)
     if (*len == *cap) {
         *cap *= 2;
         result = realloc(result, *cap);
@@ -52,6 +53,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
         case T_U32: {
             uint32_t result = -1;
 
+            // Lê o valor, se não for nulo
             if (!is_null) {
                 int ret = fscanf(f, "%" SCNu32, &result);
 
@@ -67,6 +69,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
         case T_FLT: {
             float result = -1;
 
+            // Lê o valor, se não for nulo
             if (!is_null) {
                 int ret = fscanf(f, "%f", &result);
 
@@ -86,12 +89,15 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             if (!delims) {
                 c = fgetc(f);
 
+                // Se delimitadores de campo não foram especificados e o primeiro caractere
+                // (diferente de espaço) lido não for '"', a única possibilidade para a string
+                // é o valor nulo
                 if (c != '"') {
                     char buf[5] = {};
                     char *ptr = buf;
 
                     // Lê no máximo 4 caracteres para verificar se
-                    // a string lida corresponde a um valor "null"
+                    // a string lida corresponde a um valor "nulo"
                     do {
                         *ptr++ = tolower(c);
                         c = fgetc(f);
@@ -116,6 +122,8 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             if (dest)
                 result = malloc(cap);
 
+            // Lê o próximo caractere da string, até que seja
+            // encontrado o '"' ou o delimitador de campo
             while (true) {
                 c = fgetc(f);
 
