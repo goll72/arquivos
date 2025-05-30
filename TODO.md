@@ -12,6 +12,9 @@
  - [ ] Parar a busca antecipadamente se o campo buscado for `attack_id`
        e um registro com aquele ID já foi encontrado.
 
+ - [ ] Consertar `make -j` (dependência explícita no `$(BUILD)/.gitignore`),
+       remover caracteres `/` ao final de `$(BUILD)`
+
  - [x] Usar apenas `NULO` para representar valores nulos no código de
        parsing de strings
 
