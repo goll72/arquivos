@@ -26,19 +26,22 @@ zip: | $(BUILD)/
 	zip -MM -r $(ZIP) . -i '*.c' '*.h' Makefile
 
 clean:
-	rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
-	! [ -d $(BUILD) ] || find $(BUILD) -type d -delete
+	@rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
+	@! [ -d $(BUILD) ] || find $(BUILD) -type d -delete
 
 -include $(DEP)
 
+# Roda casos de teste, não é relevante no runcodes
+-include test.mk
+
 $(BUILD)/:
-	mkdir -p $@
-	echo '*' > $@.gitignore
+	@mkdir -p $@
+	@echo '*' > $@.gitignore
 
 $(BUILD)/%/:
-	mkdir -p $@
+	@mkdir -p $@
 
-$(EXE): $(OBJ) $(GEN)
+$(EXE): $(OBJ) | $(BUILD)/
 	$(CC) $(BASECFLAGS) $(OBJ) $(BASELDFLAGS) -o $@
 
 $(BUILD)/%.o: src/%.c | $(dir $(OBJ))

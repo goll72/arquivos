@@ -1,0 +1,6 @@
+3 ataque9.bin 5
+1 idAttack 1
+2 country "CHINA" targetIndustry "RETAIL"
+3 country "BRAZIL" defenseMechanism "VPN" year 2024
+2 financialLoss 43.4 country "BRAZIL"
+1 attackType "MAN-IN-THE-MIDDLE"
