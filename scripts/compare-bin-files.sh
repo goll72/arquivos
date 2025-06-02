@@ -17,5 +17,12 @@ FILES=(**/*)
 cd - > /dev/null
 
 for f in "${FILES[@]}"; do
-    diff -u -U100 <(hexdump -C "$TREE_A/$f") <(hexdump -C "$TREE_B/$f")
+    pretty=$(sed 's;/;-;g' <<< "$f")
+
+    hexdump -C "$TREE_A/$f" > /tmp/output.$pretty
+    hexdump -C "$TREE_B/$f" > /tmp/expected.$pretty
+
+    git diff --no-index -U100 /tmp/output.$pretty /tmp/expected.$pretty
+
+    rm /tmp/output.$pretty /tmp/expected.$pretty 
 done

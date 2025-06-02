@@ -32,16 +32,19 @@ clean:
 -include $(DEP)
 
 # Roda casos de teste, não é relevante no runcodes
+# (não está incluso no arquivo .zip)
 -include test.mk
 
 $(BUILD)/:
 	@mkdir -p $@
-	@echo '*' > $@.gitignore
+
+$(BUILD)/.gitignore: $(BUILD)/
+	@echo '*' > $@
 
 $(BUILD)/%/:
 	@mkdir -p $@
 
-$(EXE): $(OBJ) | $(BUILD)/
+$(EXE): $(OBJ) | $(BUILD)/.gitignore
 	$(CC) $(BASECFLAGS) $(OBJ) $(BASELDFLAGS) -o $@
 
 $(BUILD)/%.o: src/%.c | $(dir $(OBJ))

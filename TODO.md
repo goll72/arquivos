@@ -1,4 +1,4 @@
- - [ ] Ler o resto do registro apenas se não estiver removido,
+ - [x] Ler o resto do registro apenas se não estiver removido,
        ignorando o fato de que pode estar inválido. Documentar na
        função de leitura do registro que o resto do registro só será
        válido se o campo `removed` for `REC_NOT_REMOVED`
@@ -12,8 +12,9 @@
  - [ ] Parar a busca antecipadamente se o campo buscado for `attack_id`
        e um registro com aquele ID já foi encontrado.
 
- - [ ] Consertar `make -j` (dependência explícita no `$(BUILD)/.gitignore`),
+ - [x] Consertar `make -j` (dependência explícita no `$(BUILD)/.gitignore`),
        remover caracteres `/` ao final de `$(BUILD)`
+       (`-j` não funciona para `make test`, no entanto)
 
  - [x] Usar apenas `NULO` para representar valores nulos no código de
        parsing de strings
