@@ -45,12 +45,12 @@ void query_free(query_t *query);
  * ser alocado dinamicamente. Passará a pertencer à query e será
  * desalocado ao usar `query_free`.
  */
-void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, void *buf);
+void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, uint8_t typeflags, void *buf);
 
 /**
  * Retorna `true` se todas as condições adicionadas
  * à query `query` são verdadeiras para `obj`.
  */
-bool query_matches(query_t *query, const void *obj);
+bool query_matches(query_t *query, const void *obj, bool *unique);
 
 #endif

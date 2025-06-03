@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "query.h"
+#include "typeflags.h"
 
 /**
  * As queries foram implementadas como uma lista encadeada
@@ -22,6 +23,8 @@ struct query_cond {
 
     /** Tipo de dado do valor na posição de memória a ser comparada */ 
     enum typeinfo info;
+
+    uint8_t flags;
 
     query_cond_t *next;
 };
@@ -57,12 +60,13 @@ void query_free(query_t *query)
     free(query);
 }
 
-void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, void *buf)
+void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, uint8_t typeflags, void *buf)
 {
     query_cond_t *cond = malloc(sizeof *cond);
 
     cond->offset = offset;
     cond->info = info;
+    cond->flags = typeflags;
 
     cond->buf = buf;
 
@@ -70,11 +74,13 @@ void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, vo
     query->conditions = cond;
 }
 
-bool query_matches(query_t *query, const void *obj)
+bool query_matches(query_t *query, const void *obj, bool *unique)
 {
     // O produto do conjunto vazio é 1
     if (!query->conditions)
         return true;
+
+    bool unique_tmp = false;
 
     for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
         const char *const buf = ((const char *)obj) + cond->offset;
@@ -83,6 +89,9 @@ bool query_matches(query_t *query, const void *obj)
             case T_U32: {
                 if (memcmp(buf, cond->buf, sizeof(uint32_t)) != 0)
                     return false;
+
+                if (cond->flags & F_UNIQUE)
+                    unique_tmp = true;
 
                 break;
             }
@@ -102,6 +111,8 @@ bool query_matches(query_t *query, const void *obj)
                 if (a != b)
                     return false;
 
+                // Não faz sentido um float ser único
+
                 break;
             }
             case T_STR: {
@@ -112,12 +123,15 @@ bool query_matches(query_t *query, const void *obj)
                 // dereferenciá-lo.
                 memcpy(&str, buf, sizeof str);
 
-                // Se ambas as strings forem `NULL`, são iguais
+                // Se ambas as strings forem `NULL`, são iguais, porém não podem ser únicas
                 if (!str && !cond->buf)
                     continue;
 
                 if (!str || !cond->buf || strcmp(str, cond->buf) != 0)
                     return false;
+
+                if (cond->flags & F_UNIQUE)
+                    unique_tmp = true;
 
                 break;
             }
@@ -125,6 +139,8 @@ bool query_matches(query_t *query, const void *obj)
                 return false;
         }
     }
+
+    *unique = unique_tmp;
 
     return true;
 }

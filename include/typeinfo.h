@@ -23,4 +23,6 @@ enum typeinfo {
         float:    T_FLT, \
         char *:   T_STR)
 
+#include "typeflags.h"
+
 #endif /* TYPEINFO_H */

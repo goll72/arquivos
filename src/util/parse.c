@@ -61,6 +61,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
                     return false;
             }
 
+            // Copia o valor lido para o buffer passado pelo usuário
             if (dest)
                 memcpy(dest, &result, sizeof result);
 
@@ -77,6 +78,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
                     return false;
             }
 
+            // Copia o valor lido para o buffer passado pelo usuário
             if (dest)
                 memcpy(dest, &result, sizeof result);
 
@@ -89,9 +91,10 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             if (!delims) {
                 c = fgetc(f);
 
-                // Se delimitadores de campo não foram especificados e o primeiro caractere
-                // (diferente de espaço) lido não for '"', a única possibilidade para a string
-                // é o valor nulo
+                // Se delimitadores de campo não foram especificados (o que implica na string tendo
+                // que ser delimitada por aspas duplas --- "") e o primeiro caractere (diferente de espaço)
+                // lido não for '"', a única possibilidade para a string lida é o valor nulo
+                // (ou algum valor inválido/lixo, que nessa implementação é ignorado)
                 if (c != '"') {
                     char buf[5] = {};
                     char *ptr = buf;
@@ -106,6 +109,7 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
                     *ptr = '\0';
 
                     if (IS_NULL_STR_VALUE(buf)) {
+                        // Copia o valor `NULL` para o buffer passado pelo usuário
                         if (dest)
                             memcpy(dest, &result, sizeof result);
 
@@ -119,6 +123,8 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
             size_t cap = 8;
             size_t len = 0;
 
+            // Se o usuário passar um buffer válido, devemos alocar espaço para ler a string
+            // Caso contrário, não precisamos armazenar a string lida
             if (dest)
                 result = malloc(cap);
 
@@ -128,8 +134,8 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
                 c = fgetc(f);
 
                 if ((!delims && c == '"') || (delims && strchr(delims, c))) {
-                    // Não é possível ler strings vazias usando delimitadores,
-                    // essas strings são convertidas para `NULL`
+                    // Não é possível ler strings vazias usando delimitadores
+                    // de campo, essas strings são convertidas para `NULL`
                     if (delims && len == 0) {
                         free(result);
                         result = NULL;
@@ -183,6 +189,9 @@ bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
 
 bool csv_next_record(FILE *f, bool *eof)
 {
+    // Precisamos guardar os últimos dois caracteres encontrados em `f`
+    // para verificar se uma sequência válida de fim de linha foi encontrada,
+    // visto que "\r\n" é uma sequência válida
     int c = ' ';
     int prev = c;
 

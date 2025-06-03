@@ -1,3 +1,5 @@
+#include "typeflags.h"
+
 /**
  * Define os campos do registro de dados, de forma que a macro
  * `METADATA_FIELD` possa ser usada para manipular os campos de
@@ -18,7 +20,7 @@
 #endif
 
 #ifndef FIXED_FIELD
-#define FIXED_FIELD(T, name, repr)
+#define FIXED_FIELD(T, name, repr, flags)
 #endif
 
 #ifndef VAR_FIELD
@@ -41,13 +43,13 @@ METADATA_FIELD(uint32_t, size,              _)
 METADATA_FIELD(int64_t,  next_removed_rec,  _)
 
 /** Identificador do ataque. */
-FIXED_FIELD(uint32_t,    attack_id,         "idAttack")
+FIXED_FIELD(uint32_t,    attack_id,         "idAttack",      F_UNIQUE)
 
 /** Ano em que o ataque ocorreu. */
-FIXED_FIELD(uint32_t,    year,              "year")
+FIXED_FIELD(uint32_t,    year,              "year",          0)
 
 /** Prejuízo causado pelo ataque. */
-FIXED_FIELD(float,       financial_loss,    "financialLoss")
+FIXED_FIELD(float,       financial_loss,    "financialLoss", 0)
 
 /** País em que o ataque ocorreu. */
 VAR_FIELD(char *,        country,           "country")

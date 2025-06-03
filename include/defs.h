@@ -95,20 +95,21 @@ typedef struct {
  *
  * Retorna `false` se `field_repr` for inválido.
  */
-static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enum typeinfo *info)
+static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enum typeinfo *info, uint8_t *flags)
 {
     if (!field_repr)
         return false;
 
-    #define X(T, name, repr) { repr, offsetof(f_data_rec_t, name), GET_TYPEINFO(T) },
+    #define X(T, name, repr, flags) { repr, offsetof(f_data_rec_t, name), GET_TYPEINFO(T), flags },
 
-    #define FIXED_FIELD X
-    #define VAR_FIELD   X
+    #define FIXED_FIELD(T, name, repr, flags) X(T, name, repr, flags)
+    #define VAR_FIELD(T, name, repr)          X(T, name, repr, 0)
 
     static const struct {
         char *repr;
         size_t offset;
         enum typeinfo info;
+        uint8_t flags;
     } info_arr[] = {
         #include "x/data.h"
     };
@@ -125,6 +126,7 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
         if (strcmp(field_repr, info_arr[i].repr) == 0) {
             *offset = info_arr[i].offset;
             *info = info_arr[i].info;
+            *flags = info_arr[i].flags;
 
             return true;
         }
