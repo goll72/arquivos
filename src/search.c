@@ -1,8 +1,9 @@
+#include "defs.h"
 #include "file.h"
-#include "query.h"
+#include "vset.h"
 #include "search.h"
 
-int64_t file_search_seq_next(FILE *f, const f_header_t *header, query_t *query, f_data_rec_t *rec, bool *unique)
+int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_data_rec_t *rec, bool *unique)
 {
     long current = ftell(f);
     
@@ -10,7 +11,10 @@ int64_t file_search_seq_next(FILE *f, const f_header_t *header, query_t *query, 
         if (!file_read_data_rec(f, header, rec))
             return -1;
 
-        if (query_matches(query, rec, unique))
+        if (rec->removed == REC_REMOVED)
+            continue;
+
+        if (vset_match_against(vset, rec, unique))
             return current;
 
         current = ftell(f);

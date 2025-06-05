@@ -6,7 +6,7 @@ ifeq ($(BUILD),)
 $(error "Define BUILD to a non-empty value")
 endif
 
-SRC = src/main.c src/file.c src/query.c src/search.c \
+SRC = src/main.c src/file.c src/vset.c src/search.c \
       src/util/hash.c src/util/parse.c
 OBJ = $(SRC:src/%.c=$(BUILD)/%.o)
 DEP = $(OBJ:.o=.d)

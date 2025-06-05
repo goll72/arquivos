@@ -6,7 +6,7 @@
 
 #include "defs.h"
 #include "file.h"
-#include "query.h"
+#include "vset.h"
 #include "error.h"
 #include "search.h"
 
@@ -75,22 +75,18 @@ static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
     return f;
 }
 
-/**
- * Lê uma query a partir da `stdin`.
- *
- * XXX: ...
- */
-static query_t *query_new_from_stdin(void)
+/** Lê um vset a partir da `stdin`. */
+static vset_t *vset_new_from_stdin(void)
 {
     int n_conds;
 
-    // Lê a quantidade de condições de cada query
+    // Lê a quantidade de valores do vset
     int ret = scanf("%d", &n_conds);
 
     if (ret != 1)
         return NULL;
 
-    query_t *query = query_new();
+    vset_t *vset = vset_new();
 
     for (int j = 0; j < n_conds; j++) {
         size_t offset;
@@ -140,15 +136,14 @@ static query_t *query_new_from_stdin(void)
         if (info == T_STR)
             buf = str;
 
-        // Adiciona uma condição de igualdade à query que consiste em:
+        // Adiciona um valor ao vset.
         //
-        // Interpretar o valor na posição `offset` da struct `f_data_rec_t`
-        // com o tipo dado por `info` e verificar se seu valor é igual ao
-        // de `buf`, que possui esse mesmo tipo
-        query_add_cond_equals(query, offset, info, flags, buf);
+        // Esse valor será comparado com o valor na posição `offset` da struct
+        // `f_data_rec_t`, usando o tipo dado por `info` para realizar a comparação.
+        vset_add_value(vset, offset, info, flags, buf);
     }
 
-    return query;
+    return vset;
 }
 
 int main(void)
@@ -305,15 +300,15 @@ int main(void)
             }
 
             for (int i = 0; i < n_queries; i++) {
-                query_t *query;
+                vset_t *vset;
 
-                // O conjunto de condições da query será o conjunto vazio,
-                // cujo (produto/E lógico) é (1/verdadeiro). Dessa forma, todos
-                // os registros serão buscados.
+                // No primeiro caso, o conjunto de condições da query (vset) será
+                // o conjunto vazio, cujo (produto/E lógico) é (1/verdadeiro).
+                // Dessa forma, todos os registros serão buscados.
                 if (func == FUNC_SELECT_STAR)
-                    query = query_new();
+                    vset = vset_new();
                 else
-                    query = query_new_from_stdin();
+                    vset = vset_new_from_stdin();
 
                 bool no_matches = true;
 
@@ -323,7 +318,7 @@ int main(void)
                 //Retorna à posição inicial (após o header)
                 fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
-                while (file_search_seq_next(f, &header, query, &rec, &unique) != -1) {
+                while (file_search_seq_next(f, &header, vset, &rec, &unique) != -1) {
                     file_print_data_rec(&header, &rec);
                     printf("\n");
 
@@ -340,7 +335,7 @@ int main(void)
                         break;
                 }
 
-                query_free(query);
+                vset_free(vset);
 
                 if (no_matches) {
                     puts(E_NOREC);

@@ -1,20 +1,11 @@
 #include <string.h>
 
-#include "query.h"
+#include "vset.h"
 #include "typeflags.h"
 
-/**
- * As queries foram implementadas como uma lista encadeada
- * de condições, visto que sempre é necessário percorrer
- * toda a lista para verificar se as condições passam.
- *
- * Dessa forma, não é necessário saber o número de condições
- * a priori, ao criar a query.
- */
- 
-typedef struct query_cond query_cond_t;
+typedef struct vset_node vset_node_t;
 
-struct query_cond {
+struct vset_node {
     /** Região de memória referência para comparação */
     void *buf;
 
@@ -26,30 +17,30 @@ struct query_cond {
 
     uint8_t flags;
 
-    query_cond_t *next;
+    vset_node_t *next;
 };
 
-struct query {
-    query_cond_t *conditions;
+struct vset {
+    vset_node_t *nodes;
 };
 
-query_t *query_new(void)
+vset_t *vset_new(void)
 {
-    return calloc(1, sizeof(query_t));
+    return calloc(1, sizeof(vset_t));
 }
 
-void query_free(query_t *query)
+void vset_free(vset_t *vset)
 {
-    query_cond_t *prev = NULL;
+    vset_node_t *prev = NULL;
 
     // Percorre a lista, desalocando cada nó percorrido.
-    for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
+    for (vset_node_t *curr = vset->nodes; curr; curr = curr->next) {
         if (prev) {
             free(prev->buf);
             free(prev);
         }
 
-        prev = cond;
+        prev = curr;
     }
 
     if (prev) {
@@ -57,40 +48,40 @@ void query_free(query_t *query)
         free(prev);
     }
 
-    free(query);
+    free(vset);
 }
 
-void query_add_cond_equals(query_t *query, size_t offset, enum typeinfo info, uint8_t typeflags, void *buf)
+void vset_add_value(vset_t *vset, size_t offset, enum typeinfo info, uint8_t typeflags, void *buf)
 {
-    query_cond_t *cond = malloc(sizeof *cond);
+    vset_node_t *node = malloc(sizeof *node);
 
-    cond->offset = offset;
-    cond->info = info;
-    cond->flags = typeflags;
+    node->offset = offset;
+    node->info = info;
+    node->flags = typeflags;
 
-    cond->buf = buf;
+    node->buf = buf;
 
-    cond->next = query->conditions;
-    query->conditions = cond;
+    node->next = vset->nodes;
+    vset->nodes = node;
 }
 
-bool query_matches(query_t *query, const void *obj, bool *unique)
+bool vset_match_against(vset_t *vset, const void *obj, bool *unique)
 {
     // O produto do conjunto vazio é 1
-    if (!query->conditions)
+    if (!vset->nodes)
         return true;
 
     bool unique_tmp = false;
 
-    for (query_cond_t *cond = query->conditions; cond; cond = cond->next) {
-        const char *const buf = ((const char *)obj) + cond->offset;
+    for (vset_node_t *curr = vset->nodes; curr; curr = curr->next) {
+        const char *const buf = ((const char *)obj) + curr->offset;
 
-        switch (cond->info) {
+        switch (curr->info) {
             case T_U32: {
-                if (memcmp(buf, cond->buf, sizeof(uint32_t)) != 0)
+                if (memcmp(buf, curr->buf, sizeof(uint32_t)) != 0)
                     return false;
 
-                if (cond->flags & F_UNIQUE)
+                if (curr->flags & F_UNIQUE)
                     unique_tmp = true;
 
                 break;
@@ -106,7 +97,7 @@ bool query_matches(query_t *query, const void *obj, bool *unique)
                 float a, b;
 
                 memcpy(&a, buf, sizeof a);
-                memcpy(&b, cond->buf, sizeof b);
+                memcpy(&b, curr->buf, sizeof b);
 
                 if (a != b)
                     return false;
@@ -124,13 +115,13 @@ bool query_matches(query_t *query, const void *obj, bool *unique)
                 memcpy(&str, buf, sizeof str);
 
                 // Se ambas as strings forem `NULL`, são iguais, porém não podem ser únicas
-                if (!str && !cond->buf)
+                if (!str && !curr->buf)
                     continue;
 
-                if (!str || !cond->buf || strcmp(str, cond->buf) != 0)
+                if (!str || !curr->buf || strcmp(str, curr->buf) != 0)
                     return false;
 
-                if (cond->flags & F_UNIQUE)
+                if (curr->flags & F_UNIQUE)
                     unique_tmp = true;
 
                 break;
@@ -143,4 +134,32 @@ bool query_matches(query_t *query, const void *obj, bool *unique)
     *unique = unique_tmp;
 
     return true;
+}
+
+void vset_patch(vset_t *vset, void *obj)
+{
+    for (vset_node_t *curr = vset->nodes; curr; curr = curr->next) {
+        char *buf = ((char *)obj) + curr->offset;
+
+        switch (curr->info) {
+            case T_U32:
+                memcpy(buf, curr->buf, sizeof(uint32_t));
+                break;
+            case T_FLT:
+                memcpy(buf, curr->buf, sizeof(float));
+                break;
+            case T_STR: {
+                // XXX: ineficiente!!
+                char *str;
+                memcpy(&str, buf, sizeof str);
+
+                free(str);
+                str = strdup(curr->buf);
+
+                memcpy(buf, &str, sizeof str);
+                
+                break;
+            }
+        }
+    }
 }
