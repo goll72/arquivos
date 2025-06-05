@@ -16,8 +16,11 @@
 
 enum functionality {
     FUNC_CREATE_TABLE = 1,
-    FUNC_SELECT_STAR = 2,
+    FUNC_SELECT_STAR  = 2,
     FUNC_SELECT_WHERE = 3,
+    FUNC_DELETE_WHERE = 4,
+    FUNC_INSERT_INTO  = 5,
+    FUNC_UPDATE_WHERE = 6,
 };
 
 /* clang-format off */
@@ -348,6 +351,15 @@ int main(void)
 
             fclose(f);
 
+            break;
+        }
+        case FUNC_DELETE_WHERE: {
+            break;
+        }
+        case FUNC_INSERT_INTO: {
+            break;
+        }
+        case FUNC_UPDATE_WHERE: {
             break;
         }
     }
