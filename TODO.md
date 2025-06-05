@@ -5,11 +5,11 @@
 
  - [ ] Explicar melhor X macros (no código)
 
- - [ ] Implementar a funcionalidade FUNC_SELECT_WHERE
+ - [x] Implementar a funcionalidade FUNC_SELECT_WHERE
        registro-a-registro, reutilizando código da funcionalidade
        FUNC_SELECT_STAR.
 
- - [ ] Parar a busca antecipadamente se o campo buscado for `attack_id`
+ - [x] Parar a busca antecipadamente se o campo buscado for `attack_id`
        e um registro com aquele ID já foi encontrado.
 
  - [x] Consertar `make -j` (dependência explícita no `$(BUILD)/.gitignore`),
@@ -23,3 +23,5 @@
        > campos de tamanho variável?
 
  - [x] `parse.c`: adicionar comentários
+
+ - [ ] Explicar melhor vsets
