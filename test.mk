@@ -10,7 +10,14 @@ BASECFLAGS += -static
 
 GEN += $(TESTS_RUN) $(TESTS_FAILED)
 
+TEST ?= $(firstword $(TESTS))
+
 test: $(TESTS_RUN)
+
+# Gambiarra, mas colocar o lldb numa sandbox daria muito trabalho
+debug: tests/$(TEST).in $(EXE)
+	cd tests/in && lldb -o "process launch -s -i ../$(TEST).in" ../../$(EXE) || :
+	git restore tests/in
 
 $(BUILD)/tests/%.run: tests/%.in tests/%.out $(EXE) | $(dir $(TESTS_RUN)) $(BUILD)/generated/ $(BUILD)/empty/
 	bwrap \
@@ -24,3 +31,5 @@ $(BUILD)/tests/%.run: tests/%.in tests/%.out $(EXE) | $(dir $(TESTS_RUN)) $(BUIL
 
 	@rmdir $(BUILD)/empty/work
 	@find $(BUILD)/generated -type f -delete
+
+.PHONY: test debug
