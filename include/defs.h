@@ -122,7 +122,7 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
     // quantidade de strings (campos definidos no registro).
     //
     // É possível usar um hashmap para realizar a busca em O(1).
-    for (int i = 0; i < sizeof info_arr / sizeof info_arr[0]; i++) {
+    for (size_t i = 0; i < sizeof info_arr / sizeof info_arr[0]; i++) {
         if (strcmp(field_repr, info_arr[i].repr) == 0) {
             *offset = info_arr[i].offset;
             *info = info_arr[i].info;
