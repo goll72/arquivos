@@ -3,8 +3,6 @@
        função de leitura do registro que o resto do registro só será
        válido se o campo `removed` for `REC_NOT_REMOVED`
 
- - [ ] Explicar melhor X macros (no código)
-
  - [x] Implementar a funcionalidade FUNC_SELECT_WHERE
        registro-a-registro, reutilizando código da funcionalidade
        FUNC_SELECT_STAR.
@@ -25,3 +23,12 @@
  - [x] `parse.c`: adicionar comentários
 
  - [ ] Explicar melhor vsets
+
+ - [ ] Explicar melhor X macros (no código)
+
+ - [ ] Demarcar/anotar trechos de código que dependam da ordem dos campos
+       de um registro com `SYNC: <tag>`, explicar essa tag
+
+ - [ ] Documentar a função `file_cleanup_after_modify`
+
+ - [ ] Perguntar se os campos do nó da árvore B devem seguir os nomes na especificação
