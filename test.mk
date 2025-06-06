@@ -1,12 +1,14 @@
-TESTS = 1 2 3 4 5 6 7 8 9 10 11 12
+TESTS = 1 2 3 4 5 6 7 8 9 10 11 12 a1 a2 a3 a4 a5 a6 a7 a8
+
 TESTS_RUN = $(patsubst %,$(BUILD)/tests/%.run,$(TESTS))
+TESTS_FAILED = $(patsubst %,%.failed,$(TESTS_RUN))
 
 # Binário estático para que não tenhamos que
 # nos preocupar com bibliotecas dinâmicas
 HASH = \#
 BASECFLAGS += -static
 
-GEN += $(TESTS_RUN)
+GEN += $(TESTS_RUN) $(TESTS_FAILED)
 
 test: $(TESTS_RUN)
 
