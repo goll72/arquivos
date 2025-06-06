@@ -23,20 +23,6 @@ enum functionality {
     FUNC_UPDATE_WHERE = 6,
 };
 
-/* clang-format off */
-
-/**
- * Apaga os campos de tamanho variável do registro `rec`.
- */
-static void free_var_data_fields(f_data_rec_t *rec)
-{
-    #define VAR_FIELD(T, name, ...) free(rec->name);
-
-    #include "x/data.h"
-}
-
-/* clang-format on */
-
 /**
  * Aborta a execução do programa, imprimindo a mensagem `msg`.
  *
@@ -50,6 +36,55 @@ noreturn static void bail(char *msg)
     exit(0);
 }
 
+/* clang-format off */
+
+/**
+ * Apaga os campos de tamanho variável do registro `rec`.
+ */
+static void rec_free_var_data_fields(f_data_rec_t *rec)
+{
+    #define VAR_FIELD(T, name, ...) free(rec->name);
+
+    #include "x/data.h"
+}
+
+/**
+ * Lê um registro a partir de uma linha de um arquivo cujo tipo
+ * é o especificado por `ftype`.
+ */
+static void rec_parse(FILE *f, enum f_type ftype, f_data_rec_t *rec)
+{
+    rec->removed = REC_NOT_REMOVED;
+    rec->size = DATA_REC_SIZE_AFTER_SIZE_FIELD;
+    rec->next_removed_rec = -1;
+
+    #define READ_COMMON(T, name)                                      \
+        if (!parse_field(f, ftype, GET_TYPEINFO(T), &rec->name)) \
+            bail(E_PROCESSINGFILE);
+
+    #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
+
+    #define VAR_FIELD(T, name, ...) \
+        READ_COMMON(T, name)        \
+        rec->size += rec->name ? strlen(rec->name) + 2 : 0;
+
+    // Ignora os campos de metadados (uma vez que esses campos não
+    // são lidos do arquivo, mas sim inicializados pelo programa),
+    // e lê os valores dos campos de tamanho fixo e variável,
+    // em ordem, a partir do arquivo CSV, atualizando o tamanho do
+    // registro de acordo com o tamanho de cada campo de tamanho
+    // variável.
+    //
+    // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
+    // tamanho da string devido ao código do campo e ao delimitador,
+    // que ocupam 1 byte cada
+    #include "x/data.h"
+
+    #undef READ_COMMON
+}
+
+/* clang-format on */
+
 /**
  * Lê uma string (sem espaços) da `stdin`, abre um arquivo com
  * caminho dado por essa string, repassando o modo de abertura
@@ -59,7 +94,7 @@ noreturn static void bail(char *msg)
  * Aborta a execução em caso de erro ou se o arquivo estiver
  * inconsistente.
  */
-static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
+static FILE *file_open_from_stdin(f_header_t *header, const char *mode)
 {
     char path[PATH_MAX];
     int ret = scanf("%s", path);
@@ -75,10 +110,39 @@ static FILE *file_open_from_stdin_or_bail(f_header_t *header, const char *mode)
     if (!file_read_header(f, header) || header->status != STATUS_CONSISTENT)
         bail(E_PROCESSINGFILE);
 
+    if (strchr(mode, 'w') || strchr(mode, '+')) {
+        header->status = STATUS_INCONSISTENT;
+
+        fseek(f, offsetof(PACKED(f_header_t), status), SEEK_SET);
+        fwrite(&header->status, sizeof header->status, 1, f);
+
+        // Retorna à posição inicial, após o header
+        fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
+    }
+
     return f;
 }
 
-/** Lê um vset a partir da `stdin`. */
+static void file_cleanup_after_modify(FILE *f, f_header_t *header)
+{
+    // Marca o arquivo como "limpo"/consistente
+    header->status = STATUS_CONSISTENT;
+
+    // Escreve o header após realizar as modificações
+    fseek(f, 0, SEEK_SET);
+    file_write_header(f, header);
+
+    // Imprime o hash do arquivo, equivalente à função binarioNaTela
+    fseek(f, 0, SEEK_SET);
+    printf("%lf\n", hash_file(f));
+
+    fclose(f);
+}
+
+/**
+ * Lê um vset (conjunto de valores de determinados campos)
+ * a partir da `stdin`, usando os campos do arquivo de dados.
+ */
 static vset_t *vset_new_from_stdin(void)
 {
     int n_conds;
@@ -87,7 +151,7 @@ static vset_t *vset_new_from_stdin(void)
     int ret = scanf("%d", &n_conds);
 
     if (ret != 1)
-        return NULL;
+        bail(E_PROCESSINGFILE);
 
     vset_t *vset = vset_new();
 
@@ -112,14 +176,14 @@ static vset_t *vset_new_from_stdin(void)
 
         // Usado para que possamos fazer a leitura de uma string (`T_STR`)
         // alocada dinamicamente. Irá apontar para a string alocada
-        // dinamicamente por `parse_read_field`, nesse caso.
+        // dinamicamente por `parse_field`, nesse caso.
         char *str;
 
         // Reserva espaço para guardar o valor que será lido (e posteriormente
         // usado na query), de acordo com o tipo do campo. Todos os valores
         // passados para a query devem ser alocados dinamicamente. No entanto,
         // campos do tipo `T_STR` já são alocados dinamicamente pela função
-        // `parse_read_field`, logo só precisamos guardar o ponteiro
+        // `parse_field`, logo só precisamos guardar o ponteiro
         // temporariamente.
         switch (info) {
             case T_U32:
@@ -133,7 +197,7 @@ static vset_t *vset_new_from_stdin(void)
                 break;
         }
 
-        if (!parse_read_field(stdin, info, buf, NULL))
+        if (!parse_field(stdin, F_TYPE_UNDELIM, info, buf))
             bail(E_PROCESSINGFILE);
 
         if (info == T_STR)
@@ -152,6 +216,7 @@ static vset_t *vset_new_from_stdin(void)
 int main(void)
 {
     int func;
+    f_header_t header;
 
     // Lê a funcionalidade da `stdin`
     int ret = scanf("%d", &func);
@@ -179,7 +244,6 @@ int main(void)
             if (!bin_f)
                 bail(E_PROCESSINGFILE);
 
-            f_header_t header;
             file_init_header(&header);
 
             char *header_desc;
@@ -187,17 +251,17 @@ int main(void)
 
             /* clang-format off */
 
-            #define X(T, name, ...)                                              \
-                if (!csv_read_field(csv_f, T_STR, &header_desc) || !header_desc) \
-                    bail(E_PROCESSINGFILE);                                      \
-                                                                                 \
-                header_desc_len = strlen(header_desc);                           \
-                                                                                 \
-                if (header_desc_len > sizeof header.name##_desc)                 \
-                    bail(E_PROCESSINGFILE);                                      \
-                                                                                 \
-                memcpy(&header.name##_desc, header_desc, header_desc_len);       \
-                free(header_desc);                                               \
+            #define X(T, name, ...)                                                       \
+                if (!parse_field(csv_f, F_TYPE_CSV, T_STR, &header_desc) || !header_desc) \
+                    bail(E_PROCESSINGFILE);                                               \
+                                                                                          \
+                header_desc_len = strlen(header_desc);                                    \
+                                                                                          \
+                if (header_desc_len > sizeof header.name##_desc)                          \
+                    bail(E_PROCESSINGFILE);                                               \
+                                                                                          \
+                memcpy(&header.name##_desc, header_desc, header_desc_len);                \
+                free(header_desc);                                                        \
                 memset(&header.name##_desc[header_desc_len], '$', sizeof header.name##_desc - header_desc_len);
 
             #define FIXED_FIELD X
@@ -227,63 +291,21 @@ int main(void)
                 if (eof)
                     break;
 
-                f_data_rec_t rec = {
-                    .removed = REC_NOT_REMOVED,
-                    .size = DATA_REC_SIZE_AFTER_SIZE_FIELD,
-                    .next_removed_rec = -1,
-                };
-
-                /* clang-format off */
-
-                #define READ_COMMON(T, name)                                \
-                    if (!csv_read_field(csv_f, GET_TYPEINFO(T), &rec.name)) \
-                        bail(E_PROCESSINGFILE);
-
-                #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
-
-                #define VAR_FIELD(T, name, ...) \
-                    READ_COMMON(T, name)        \
-                    rec.size += rec.name ? strlen(rec.name) + 2 : 0;
-
-                // Ignora os campos de metadados (uma vez que esses campos não
-                // são lidos do arquivo, mas sim inicializados pelo programa),
-                // e lê os valores dos campos de tamanho fixo e variável,
-                // em ordem, a partir do arquivo CSV, atualizando o tamanho do
-                // registro de acordo com o tamanho de cada campo de tamanho
-                // variável.
-                //
-                // NOTE: ao ler os campos de tamanho variável, somamos 2 ao
-                // tamanho da string devido ao código do campo e ao delimitador,
-                // que ocupam 1 byte cada
-                #include "x/data.h"
-
-                #undef READ_COMMON
-
-                /* clang-format on */
+                f_data_rec_t rec;
+                rec_parse(csv_f, F_TYPE_CSV, &rec);
 
                 if (!file_write_data_rec(bin_f, &header, &rec))
                     bail(E_PROCESSINGFILE);
 
-                free_var_data_fields(&rec);
+                rec_free_var_data_fields(&rec);
 
                 header.n_valid_recs++;
             }
 
             header.next_byte_offset = ftell(bin_f);
 
-            // Marca o arquivo como "limpo"/consistente
-            header.status = STATUS_CONSISTENT;
-
-            // Escreve o header após realizar as modificações
-            fseek(bin_f, 0, SEEK_SET);
-            file_write_header(bin_f, &header);
-
-            // Imprime o hash do arquivo, equivalente à função binarioNaTela
-            fseek(bin_f, 0, SEEK_SET);
-            printf("%lf\n", hash_file(bin_f));
-
             fclose(csv_f);
-            fclose(bin_f);
+            file_cleanup_after_modify(bin_f, &header);
 
             break;
         }
@@ -291,9 +313,8 @@ int main(void)
         case FUNC_SELECT_WHERE: {
             // Na funcionalidade 2 (`FUNC_SELECT_STAR`), apenas uma query é feita.
             int n_queries = 1;
-            f_header_t header;
 
-            FILE *f = file_open_from_stdin_or_bail(&header, "rb");
+            FILE *f = file_open_from_stdin(&header, "rb");
 
             if (func == FUNC_SELECT_WHERE) {
                 int ret = scanf("%d", &n_queries);
@@ -313,21 +334,19 @@ int main(void)
                 else
                     vset = vset_new_from_stdin();
 
-                bool no_matches = true;
-
                 f_data_rec_t rec = {};
                 bool unique = false;
+                bool no_matches = true;
 
-                //Retorna à posição inicial (após o header)
+                // Retorna à posição inicial (após o header)
                 fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
                 while (file_search_seq_next(f, &header, vset, &rec, &unique) != -1) {
                     file_print_data_rec(&header, &rec);
-                    printf("\n");
 
                     no_matches = false;
 
-                    free_var_data_fields(&rec);
+                    rec_free_var_data_fields(&rec);
 
                     // Se um dos campos buscados não permitir repetições
                     // e um registro foi encontrado, parar a busca
@@ -354,12 +373,74 @@ int main(void)
             break;
         }
         case FUNC_DELETE_WHERE: {
+            FILE *f = file_open_from_stdin(&header, "rb+");
+
+            int n_queries;
+            int ret = scanf("%d", &n_queries);
+
+            if (ret != 1)
+                bail(E_PROCESSINGFILE);
+
+            for (int i = 0; i < n_queries; i++) {
+                vset_t *vset = vset_new_from_stdin();
+
+                fseek(f, SEEK_SET, sizeof(PACKED(f_header_t)));
+
+                f_data_rec_t rec = {};
+                bool unique = false;
+
+                long rec_off;
+
+                while ((rec_off = file_search_seq_next(f, &header, vset, &rec, &unique)) != -1) {
+                    rec.removed = REC_REMOVED;
+                    rec.next_removed_rec = header.top;
+                    header.top = rec_off;
+
+                    // Como devemos atualizar apenas os campos `removed` e `next_removed_rec`,
+                    // iremos apenas fazer as modificações diretamente, em vez de usar a função
+                    // `file_write_data_rec`, que escreve todo o registro.
+                    fseek(f, SEEK_SET, rec_off);
+
+                    fwrite(&rec.removed, sizeof rec.removed, 1, f);
+                    fseek(f, SEEK_CUR, sizeof rec.size);
+                    fwrite(&rec.next_removed_rec, sizeof rec.next_removed_rec, 1, f);
+
+                    rec_free_var_data_fields(&rec);
+
+                    if (unique)
+                        break;
+                }
+            }
+
+            file_cleanup_after_modify(f, &header);
+
             break;
         }
         case FUNC_INSERT_INTO: {
+            FILE *f = file_open_from_stdin(&header, "rb+");
+
+            int n_insertions;
+            int ret = scanf("%d", &n_insertions);
+
+            if (ret != 1)
+                bail(E_PROCESSINGFILE);
+
+            for (int i = 0; i < n_insertions; i++) {
+                f_data_rec_t rec;
+                rec_parse(stdin, F_TYPE_UNDELIM, &rec);
+            }
+
+            file_cleanup_after_modify(f, &header);
+
             break;
         }
         case FUNC_UPDATE_WHERE: {
+            FILE *f = file_open_from_stdin(&header, "rb+");
+
+            /* ... */
+
+            file_cleanup_after_modify(f, &header);
+
             break;
         }
     }

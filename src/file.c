@@ -264,5 +264,7 @@ void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
     // cada campo que estão presentes no registro de cabeçalho
     #include "x/data-print.h"
 
+    putc('\n', stdout);
+
     #undef HEADER_DESC_ARGS
 }

@@ -31,7 +31,23 @@ static inline char *append_realloc(char *result, size_t *len, size_t *cap, char 
     return result;
 }
 
-bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delims)
+/**
+ * Os delimitadores aceitos para campos do tipo `T_STR` são
+ * especificados por `delims`. Se for `NULL`, a string deverá
+ * aparecer entre aspas duplas, não sendo possível ler strings
+ * contendo aspas duplas.
+ *
+ * Valores ausentes ("nulos") são permitidos. Os delimitadores
+ * passados em `delims` são usados para verificar se os campos
+ * estão presentes. Para essa verificação, '\r' e '\n' também
+ * são considerados delimitadores. Note que delimitadores só
+ * são "lidos" (consumidos) ao ler campos com valor ausente.
+ *
+ * Campos do tipo `T_U32` e `T_FLT` serão inicializados com
+ * `UINT_MAX` (equivalente a `(uint32_t) -1`) e `-1.f`,
+ * respectivamente, nesse caso.
+ */
+static bool parse_field_by_delims(FILE *f, enum typeinfo info, void *dest, const char *delims)
 {
     int c;
 
@@ -160,16 +176,21 @@ bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delim
     return true;
 }
 
-bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
+/**
+ * Lê o campo atual do arquivo CSV `f`. Assume que o arquivo é
+ * "seekable", ou seja, `fseek` pode ser usado, ao contrário de
+ * outras funções.
+ */
+static bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
 {
-    bool status = parse_read_field(f, info, dest, ",\r\n");
+    bool status = parse_field_by_delims(f, info, dest, ",\r\n");
 
     if (!status)
         return false;
 
     int c;
 
-    // Nesse caso, o delimitador foi lido em `parse_read_field`,
+    // Nesse caso, o delimitador foi lido em `parse_field_by_delims`,
     // mas devemos lê-lo novamente.
     if (info == T_STR)
         fseek(f, -1, SEEK_CUR);
@@ -185,6 +206,24 @@ bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
     } while (isspace(c));
 
     return c == ',';
+}
+
+/** Lê um campo de um arquivo cujos valores são separados por espaço. */
+static bool undelim_read_field(FILE *f, enum typeinfo info, void *dest)
+{
+    return parse_field_by_delims(f, info, dest, NULL);
+}
+
+bool parse_field(FILE *f, enum f_type ftype, enum typeinfo info, void *dest)
+{
+    switch (ftype) {
+        case F_TYPE_CSV:
+            return csv_read_field(f, info, dest);
+        case F_TYPE_UNDELIM:
+            return undelim_read_field(f, info, dest);
+        default:
+            return false;
+    }
 }
 
 bool csv_next_record(FILE *f, bool *eof)

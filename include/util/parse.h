@@ -8,16 +8,32 @@
 
 /** Funções para lidar com parsing de strings. */
 
+enum f_type {
+    F_TYPE_CSV,
+    F_TYPE_UNDELIM,
+};
+
 /**
- * Lê o campo com tipo especificado por `info`, armazenando o
- * resultado na região de memória apontada por `dest`. Se
- * `dest` for `NULL`, a leitura é realizada, porém o resultado
- * não é armazenado.
+ * Lê um campo do arquivo de texto `f`, com tipo especificado por
+ * `info`, armazenando o resultado na região de memória apontada
+ * por `dest`. Se `dest` for `NULL`, a leitura é realizada, porém o
+ * resultado não é armazenado.
  *
  * Caso `info` seja `T_STR`, dereferencia a região de memória
  * apontada por `dest`, lê seu conteudo como um `char *`, aloca
  * espaço para a string lida e guarda o endereço alocado nessa
  * região de memória.
+ *
+ * A forma de detectar um campo depende do tipo do arquivo a ser
+ * lido, determinado por `ftype`, que pode ser `F_TYPE_CSV` ou
+ * `F_TYPE_UNDELIM` --- delimitado por espaço em branco em vez
+ * de usar caractere(s) delimitador(es) convencional(is).
+ *
+ * Para arquivos do tipo `F_TYPE_CSV`, uma vírgula/quebra de linha
+ * delimitando um campo do tipo `T_STR` representa uma string nula
+ * (isso implica que não é possível ler uma string vazia).
+ * Já para arquivos do tipo `F_TYPE_UNDELIM`, strings devem aparecer
+ * entre aspas duplas, e o valor nulo é `nulo` (sem aspas duplas).
  *
  * Os delimitadores aceitos para campos do tipo `T_STR` são
  * especificados por `delims`. Se for `NULL`, a string deverá
@@ -25,8 +41,6 @@
  * contendo aspas duplas.
  *
  * Espaços em branco são sempre permitidos antes dos campos.
- * Não é possível ler uma string contendo apenas espaços se
- * `delims` não for `NULL`.
  *
  * Valores ausentes ("nulos") são permitidos. Os delimitadores
  * passados em `delims` são usados para verificar se os campos
@@ -36,28 +50,11 @@
  *
  * Campos do tipo `T_U32` e `T_FLT` serão inicializados com
  * `UINT_MAX` (equivalente a `(uint32_t) -1`) e `-1.f`,
- * respectivamente, nesse caso. Para ler uma string vazia, é
- * necessário que `delims` seja `NULL`. Além disso, para ler
- * uma string "nula" se `delims` for `NULL`, os valores `nil`,
- * `null` ou `nulo` podem ser usados, sem aspas (maiúsculo ou
- * minúsculo).
+ * respectivamente, nesse caso.
  *
  * Retorna `false` se a leitura falhar.
  */
-bool parse_read_field(FILE *f, enum typeinfo info, void *dest, const char *delims);
-
-/**
- * Funções para lidar com arquivos CSV. Essas funções asssumem
- * que os arquivos são "seekable" (`ftell` e `fseek` podem ser
- * usados), ao contrário das funções acima.
- */
-
-/**
- * Lê o campo atual do arquivo CSV `f`.
- *
- * vd. `parse_read_field`.
- */
-bool csv_read_field(FILE *f, enum typeinfo info, void *dest);
+bool parse_field(FILE *f, enum f_type ftype, enum typeinfo info, void *dest);
 
 /**
  * Lê o delimitador de registro CSV '\n' (opcionalmente precedido
