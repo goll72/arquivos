@@ -42,16 +42,6 @@ enum f_type {
  *
  * Espaços em branco são sempre permitidos antes dos campos.
  *
- * Valores ausentes ("nulos") são permitidos. Os delimitadores
- * passados em `delims` são usados para verificar se os campos
- * estão presentes. Para essa verificação, '\r' e '\n' também
- * são considerados delimitadores. Note que delimitadores só
- * são "lidos" (consumidos) ao ler campos com valor ausente.
- *
- * Campos do tipo `T_U32` e `T_FLT` serão inicializados com
- * `UINT_MAX` (equivalente a `(uint32_t) -1`) e `-1.f`,
- * respectivamente, nesse caso.
- *
  * Retorna `false` se a leitura falhar.
  */
 bool parse_field(FILE *f, enum f_type ftype, enum typeinfo info, void *dest);

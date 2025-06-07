@@ -4,6 +4,7 @@
 
 #include "defs.h"
 #include "file.h"
+#include "vset.h"
 
 #define FAIL_IF(x) \
     if (x)         \
@@ -178,7 +179,7 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
         return false;
 
     if (rec->removed == REC_REMOVED) {
-        fseek(f, rec->size - DATA_REC_SIZE_AFTER_SIZE_FIELD, SEEK_CUR);
+        fseek(f, rec->size - sizeof rec->next_removed_rec, SEEK_CUR);
         return true;
     }
 
@@ -201,6 +202,14 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
 
     #undef X
     #undef Y
+
+    // Verifica que o final do registro possui lixo válido
+    while (rem_size > 0) {
+        if (fgetc(f) != '$')
+            return false;
+
+        rem_size--;
+    }
 
     return rem_size == 0;
 }
@@ -248,6 +257,26 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
     #undef Y
 
     return true;
+}
+
+int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_data_rec_t *rec, bool *unique)
+{
+    long current = ftell(f);
+
+    while (current < header->next_byte_offset) {
+        current = ftell(f);
+
+        if (!file_read_data_rec(f, header, rec))
+            return -1;
+
+        if (rec->removed == REC_REMOVED)
+            continue;
+
+        if (vset_match_against(vset, rec, unique))
+            return current;
+    }
+
+    return -1;
 }
 
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)

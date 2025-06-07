@@ -17,6 +17,7 @@ test: $(TESTS_RUN)
 # Gambiarra, mas colocar o lldb numa sandbox daria muito trabalho
 debug: tests/$(TEST).in $(EXE)
 	cd tests/in && lldb -o "process launch -s -i ../$(TEST).in" ../../$(EXE) || :
+	git clean -f tests/in
 	git restore tests/in
 
 $(BUILD)/tests/%.run: tests/%.in tests/%.out $(EXE) | $(dir $(TESTS_RUN)) $(BUILD)/generated/ $(BUILD)/empty/

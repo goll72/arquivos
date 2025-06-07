@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <limits.h>
 
@@ -8,7 +9,6 @@
 #include "file.h"
 #include "vset.h"
 #include "error.h"
-#include "search.h"
 
 #include "util/hash.h"
 #include "util/parse.h"
@@ -34,6 +34,24 @@ noreturn static void bail(char *msg)
 {
     puts(msg);
     exit(0);
+}
+
+/**
+ * Wrapper para a função `scanf` que aborta a execução
+ * se não for possível ler a quantidade certa de campos.
+ */
+static void scanf_expect(int n, const char *restrict fmt, ...)
+    __attribute__((format(scanf, 2, 3)));
+
+static void scanf_expect(int n, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    if (vscanf(fmt, ap) != n)
+        bail(E_PROCESSINGFILE);
+
+    va_end(ap);
 }
 
 /* clang-format off */
@@ -97,10 +115,7 @@ static void rec_parse(FILE *f, enum f_type ftype, f_data_rec_t *rec)
 static FILE *file_open_from_stdin(f_header_t *header, const char *mode)
 {
     char path[PATH_MAX];
-    int ret = scanf("%s", path);
-
-    if (ret != 1)
-        bail(E_PROCESSINGFILE);
+    scanf_expect(1, "%s", path);
 
     FILE *f = fopen(path, mode);
 
@@ -148,10 +163,7 @@ static vset_t *vset_new_from_stdin(void)
     int n_conds;
 
     // Lê a quantidade de valores do vset
-    int ret = scanf("%d", &n_conds);
-
-    if (ret != 1)
-        bail(E_PROCESSINGFILE);
+    scanf_expect(1, "%d", &n_conds);
 
     vset_t *vset = vset_new();
 
@@ -163,12 +175,12 @@ static vset_t *vset_new_from_stdin(void)
         char field_repr[64];
 
         // Lê o campo (representação na forma de string)
-        int ret = scanf("%s", field_repr);
+        scanf_expect(1, "%s", field_repr);
 
         // Recupera metadados sobre o campo que serão usados para
         // realizar a query: offset do campo na struct `f_data_rec_t`
         // e seu tipo (um `enum typeinfo`).
-        if (ret != 1 || !data_rec_typeinfo(field_repr, &offset, &info, &flags))
+        if (!data_rec_typeinfo(field_repr, &offset, &info, &flags))
             bail(E_PROCESSINGFILE);
 
         // Irá guardar o valor referência para comparação na query
@@ -219,20 +231,14 @@ int main(void)
     f_header_t header;
 
     // Lê a funcionalidade da `stdin`
-    int ret = scanf("%d", &func);
-
-    if (ret != 1)
-        bail(E_PROCESSINGFILE);
+    scanf_expect(1, "%d", &func);
 
     switch (func) {
         case FUNC_CREATE_TABLE: {
             char csv_path[PATH_MAX];
             char bin_path[PATH_MAX];
 
-            int ret = scanf("%s %s", csv_path, bin_path);
-
-            if (ret != 2)
-                bail(E_PROCESSINGFILE);
+            scanf_expect(2, "%s %s", csv_path, bin_path);
 
             FILE *csv_f = fopen(csv_path, "r");
 
@@ -316,12 +322,8 @@ int main(void)
 
             FILE *f = file_open_from_stdin(&header, "rb");
 
-            if (func == FUNC_SELECT_WHERE) {
-                int ret = scanf("%d", &n_queries);
-
-                if (ret != 1)
-                    bail(E_PROCESSINGFILE);
-            }
+            if (func == FUNC_SELECT_WHERE)
+                scanf_expect(1, "%d", &n_queries);
 
             for (int i = 0; i < n_queries; i++) {
                 vset_t *vset;
@@ -376,15 +378,12 @@ int main(void)
             FILE *f = file_open_from_stdin(&header, "rb+");
 
             int n_queries;
-            int ret = scanf("%d", &n_queries);
-
-            if (ret != 1)
-                bail(E_PROCESSINGFILE);
+            scanf_expect(1, "%d", &n_queries);
 
             for (int i = 0; i < n_queries; i++) {
                 vset_t *vset = vset_new_from_stdin();
 
-                fseek(f, SEEK_SET, sizeof(PACKED(f_header_t)));
+                fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
                 f_data_rec_t rec = {};
                 bool unique = false;
@@ -396,20 +395,32 @@ int main(void)
                     rec.next_removed_rec = header.top;
                     header.top = rec_off;
 
+                    // As modificações no registro de cabeçalho contido no arquivo são postergadas
+                    // para o momento em que o arquivo é fechado. Não há risco de corrupção
+                    // silenciosa do arquivo de dados, graças ao uso da flag de status.
+                    header.n_valid_recs--;
+                    header.n_removed_recs++;
+
+                    long next_rec_off = ftell(f);
+
                     // Como devemos atualizar apenas os campos `removed` e `next_removed_rec`,
                     // iremos apenas fazer as modificações diretamente, em vez de usar a função
                     // `file_write_data_rec`, que escreve todo o registro.
-                    fseek(f, SEEK_SET, rec_off);
+                    fseek(f, rec_off, SEEK_SET);
 
                     fwrite(&rec.removed, sizeof rec.removed, 1, f);
-                    fseek(f, SEEK_CUR, sizeof rec.size);
+                    fseek(f, sizeof rec.size, SEEK_CUR);
                     fwrite(&rec.next_removed_rec, sizeof rec.next_removed_rec, 1, f);
 
                     rec_free_var_data_fields(&rec);
 
                     if (unique)
                         break;
+
+                    fseek(f, next_rec_off, SEEK_SET);
                 }
+
+                vset_free(vset);
             }
 
             file_cleanup_after_modify(f, &header);
@@ -420,14 +431,13 @@ int main(void)
             FILE *f = file_open_from_stdin(&header, "rb+");
 
             int n_insertions;
-            int ret = scanf("%d", &n_insertions);
-
-            if (ret != 1)
-                bail(E_PROCESSINGFILE);
+            scanf_expect(1, "%d", &n_insertions);
 
             for (int i = 0; i < n_insertions; i++) {
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
+
+                /* ... */
             }
 
             file_cleanup_after_modify(f, &header);

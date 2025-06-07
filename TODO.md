@@ -22,13 +22,22 @@
 
  - [x] `parse.c`: adicionar comentários
 
+ - [ ] Usar length-prefixed string `str_t` em vez de `char *` para campos de
+       tamanho variável
+
+ - [x] Mover `file_search_seq_next` para `file.c`
+
+ - [ ] Criar um arquivo `crud.c` com as operações insert/delete/update (in-place)
+
  - [ ] Explicar melhor vsets
 
  - [ ] Explicar melhor X macros (no código)
+
+ - [ ] Explicar melhor parsing
 
  - [ ] Demarcar/anotar trechos de código que dependam da ordem dos campos
        de um registro com `SYNC: <tag>`, explicar essa tag
 
  - [ ] Documentar a função `file_cleanup_after_modify`
 
- - [ ] Perguntar se os campos do nó da árvore B devem seguir os nomes na especificação
+ - [ ] Perguntar se os campos do nó da árvore B devem seguir os nomes da especificação

@@ -28,7 +28,7 @@ HEADER_FIELD(int64_t,  top,                       -1)
 /**
  * Próximo byte offset disponível para inserção no arquivo (seu valor é 0
  * se não houverem registros de dados, caso contrário, indica a posição onde
- * o arquivo termina - EOF).
+ * o arquivo termina --- EOF).
  */
 HEADER_FIELD(uint64_t, next_byte_offset,           0)
 
