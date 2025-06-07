@@ -22,7 +22,7 @@ for f in "${FILES[@]}"; do
     hexdump -C "$TREE_A/$f" > /tmp/output.$pretty
     hexdump -C "$TREE_B/$f" > /tmp/expected.$pretty
 
-    git diff --no-index -U100 /tmp/output.$pretty /tmp/expected.$pretty
+    ./scripts/diff.sh /tmp/output.$pretty /tmp/expected.$pretty
 
     rm /tmp/output.$pretty /tmp/expected.$pretty 
 done

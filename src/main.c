@@ -57,16 +57,6 @@ static void scanf_expect(int n, const char *fmt, ...)
 /* clang-format off */
 
 /**
- * Apaga os campos de tamanho variável do registro `rec`.
- */
-static void rec_free_var_data_fields(f_data_rec_t *rec)
-{
-    #define VAR_FIELD(T, name, ...) free(rec->name);
-
-    #include "x/data.h"
-}
-
-/**
  * Lê um registro a partir de uma linha de um arquivo cujo tipo
  * é o especificado por `ftype`.
  */
@@ -440,6 +430,8 @@ int main(void)
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
                 /* ... */
+
+                rec_free_var_data_fields(&rec);
             }
 
             file_cleanup_after_modify(f, &header);

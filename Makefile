@@ -2,10 +2,6 @@ CC = cc
 
 BUILD ?= build
 
-ifeq ($(BUILD),)
-$(error "Define BUILD to a non-empty value")
-endif
-
 SRC = src/main.c src/file.c src/vset.c \
       src/util/hash.c src/util/parse.c
 OBJ = $(SRC:src/%.c=$(BUILD)/%.o)
@@ -27,7 +23,7 @@ zip: | $(BUILD)/
 
 clean:
 	@rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
-	@! [ -d $(BUILD) ] || find $(BUILD) -type d -delete
+	-@! [ -d $(BUILD) ] || find $(BUILD) -type d -delete
 
 -include $(DEP)
 

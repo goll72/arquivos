@@ -269,11 +269,15 @@ int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_
         if (!file_read_data_rec(f, header, rec))
             return -1;
 
+        // Nesse caso, o resto do registro não é lido, portanto
+        // não precisamos chamar a função `rec_free_var_data_fields`
         if (rec->removed == REC_REMOVED)
             continue;
 
         if (vset_match_against(vset, rec, unique))
             return current;
+
+        rec_free_var_data_fields(rec);
     }
 
     return -1;
@@ -296,4 +300,11 @@ void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
     putc('\n', stdout);
 
     #undef HEADER_DESC_ARGS
+}
+
+void rec_free_var_data_fields(f_data_rec_t *rec)
+{
+    #define VAR_FIELD(T, name, ...) free(rec->name);
+
+    #include "x/data.h"
 }

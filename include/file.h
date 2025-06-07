@@ -7,7 +7,10 @@
 #include "defs.h"
 #include "vset.h"
 
-/** Funções para lidar com os registros do arquivo. */
+/**
+ * Funções para processar/manipular o arquivo de dados,
+ * bem como lidar com os registros do arquivo.
+ */
 
 /**
  * Inicializa o registro de cabeçalho `header` com os
@@ -67,5 +70,10 @@ int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_
  * contidas no registro de cabeçalho `header`.
  */
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec);
+
+/**
+ * Apaga os campos de tamanho variável do registro `rec`.
+ */
+void rec_free_var_data_fields(f_data_rec_t *rec);
 
 #endif /* FILE_H */
