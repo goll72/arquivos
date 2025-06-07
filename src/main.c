@@ -434,6 +434,8 @@ int main(void)
             scanf_expect(1, "%d", &n_insertions);
 
             for (int i = 0; i < n_insertions; i++) {
+                consume_whitespace(stdin);
+
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 

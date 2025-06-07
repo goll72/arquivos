@@ -255,3 +255,8 @@ bool csv_next_record(FILE *f, bool *eof)
 
     return valid;
 }
+
+void consume_whitespace(FILE *f)
+{
+    fscanf(f, " ");
+}

@@ -55,4 +55,10 @@ bool parse_field(FILE *f, enum f_type ftype, enum typeinfo info, void *dest);
  */
 bool csv_next_record(FILE *f, bool *eof);
 
+/**
+ * Consome o espaço em branco presente na posição atual de `f`. Usado para
+ * parsing de campos de arquivos com tipo `F_TYPE_UNDELIM`.
+ */
+void consume_whitespace(FILE *f);
+
 #endif /* PARSE_H */
