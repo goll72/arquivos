@@ -38,7 +38,7 @@ $(BUILD)/tests/%.run: tests/%.in tests/%.out $(EXE) | $(dir $(TESTS_RUN)) $(BUIL
 	bwrap $(BWRAP_ARGS) \
 	    /arquivos < tests/$*.in > $@
 
-	@{ ./scripts/compare-bin-files.sh $(BUILD)/generated tests/out && ./scripts/diff.sh $@ tests/$*.out; } || mv $@ $@.failed
+	@{ ./scripts/compare-bin-files.sh $(BUILD)/generated tests/out && ./scripts/diff.sh $@ tests/$*.out; } || mv $(BUILD)/tests/$*.run $(BUILD)/tests/$*.failed
 
 	@rmdir $(BUILD)/empty/work
 	@find $(BUILD)/generated -type f -delete

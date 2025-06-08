@@ -15,12 +15,18 @@
 
 
 enum functionality {
-    FUNC_CREATE_TABLE = 1,
-    FUNC_SELECT_STAR  = 2,
-    FUNC_SELECT_WHERE = 3,
-    FUNC_DELETE_WHERE = 4,
-    FUNC_INSERT_INTO  = 5,
-    FUNC_UPDATE_WHERE = 6,
+    FUNC_CREATE_TABLE   =  1,
+    FUNC_SELECT_STAR    =  2,
+    FUNC_SELECT_WHERE   =  3,
+    FUNC_DELETE_WHERE   =  4,
+    FUNC_INSERT_INTO    =  5,
+    FUNC_UPDATE_WHERE   =  6,
+    FUNC_CREATE_INDEX   =  7,
+    /* Equivalente às funcionalidades anteriores, porém com uso do arquivo de índice */
+    FUNC_SELECT_WHERE_I =  8,
+    FUNC_DELETE_WHERE_I =  9,
+    FUNC_INSERT_INTO_I  = 10,
+    FUNC_UPDATE_WHERE_I = 11,
 };
 
 /**
@@ -57,8 +63,9 @@ static void scanf_expect(int n, const char *fmt, ...)
 /* clang-format off */
 
 /**
- * Lê um registro a partir de uma linha de um arquivo cujo tipo
- * é o especificado por `ftype`.
+ * Lê um registro a partir de uma linha do arquivo `f`, cujo tipo
+ * é o especificado por `ftype`. Armazena-o em `*rec`. Aborta a execução
+ * se ocorrer algum erro.
  */
 static void rec_parse(FILE *f, enum f_type ftype, f_data_rec_t *rec)
 {
@@ -97,7 +104,10 @@ static void rec_parse(FILE *f, enum f_type ftype, f_data_rec_t *rec)
  * Lê uma string (sem espaços) da `stdin`, abre um arquivo com
  * caminho dado por essa string, repassando o modo de abertura
  * `mode` para `fopen`. Lê o registro de cabeçalho presente no
- * arquivo e armazena-o em `*header`.
+ * arquivo e armazena-o em `*header`. Marca o arquivo como
+ * inconsistente se for aberto para modificação (`mode` é
+ * considerado um modo de abertura com modificação se conter
+ * o caractere 'w' ou '+').
  *
  * Aborta a execução em caso de erro ou se o arquivo estiver
  * inconsistente.
@@ -145,8 +155,9 @@ static void file_cleanup_after_modify(FILE *f, f_header_t *header)
 }
 
 /**
- * Lê um vset (conjunto de valores de determinados campos)
- * a partir da `stdin`, usando os campos do arquivo de dados.
+ * Lê um vset (conjunto de valores de determinados campos do
+ * registro do arquivo de dados) a partir da `stdin`, usando
+ * os campos do arquivo de dados.
  */
 static vset_t *vset_new_from_stdin(void)
 {
@@ -429,7 +440,55 @@ int main(void)
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
-                /* ... */
+                uint64_t actual_size = rec.size;
+
+                int64_t insert_off = header.top;
+                int64_t prev = -1;
+                int64_t next = -1;
+
+                // SYNC: XXX: ...
+                while (insert_off != -1) {
+                    fseek(f, insert_off, SEEK_SET);
+
+                    uint8_t removed;
+                    fread(&removed, sizeof removed, 1, f);
+
+                    if (removed != REC_REMOVED)
+                        bail(E_PROCESSINGFILE);
+
+                    fread(&rec.size, sizeof rec.size, 1, f);
+                    fread(&next, sizeof next, 1, f);
+
+                    if (rec.size >= actual_size)
+                        break;
+
+                    prev = insert_off;
+                    insert_off = next;
+                }
+
+                if (insert_off == -1) {
+                    insert_off = header.next_byte_offset;
+                    rec.size = actual_size;
+                }
+
+                fseek(f, insert_off, SEEK_SET);
+
+                if (!file_write_data_rec(f, &header, &rec))
+                    bail(E_PROCESSINGFILE);
+
+                if (insert_off == header.top) {
+                    header.top = next;
+                } else {
+                    fseek(f, prev + offsetof(PACKED(f_data_rec_t), next_removed_rec), SEEK_SET);
+                    fwrite(&next, sizeof next, 1, f);
+                }
+
+                header.n_valid_recs++;
+
+                if (insert_off == header.next_byte_offset)
+                    header.next_byte_offset = ftell(f);
+                else
+                    header.n_removed_recs--;
 
                 rec_free_var_data_fields(&rec);
             }
@@ -441,7 +500,12 @@ int main(void)
         case FUNC_UPDATE_WHERE: {
             FILE *f = file_open_from_stdin(&header, "rb+");
 
-            /* ... */
+            int n_updates;
+            scanf_expect(1, "%d", &n_updates);
+
+            for (int i = 0; i < n_updates; i++) {
+                /* ... */
+            }
 
             file_cleanup_after_modify(f, &header);
 

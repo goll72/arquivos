@@ -178,6 +178,9 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
     if (rec->removed != REC_REMOVED && rec->removed != REC_NOT_REMOVED)
         return false;
 
+    // O campo `next_removed_rec` foi lido, porém esse campo também é
+    // considerado em `rec->size`, logo, devemos subtrair seu tamanho
+    // para obter o offset correto
     if (rec->removed == REC_REMOVED) {
         fseek(f, rec->size - sizeof rec->next_removed_rec, SEEK_CUR);
         return true;
@@ -220,7 +223,7 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
  * Escreve a string `data` na posição atual do arquivo `f`, como um campo de
  * tamanho variável, precedido pelo seu código, `code`, e delimitado por '|'.
  */
-static bool file_write_var_field(FILE *f, uint8_t code, char *data)
+static bool file_write_var_field(FILE *f, uint8_t code, char *data, uint64_t *actual_size)
 {
     if (!data)
         return true;
@@ -233,6 +236,9 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
     bool status = fwrite(data, 1, len, f) == len;
     data[len - 1] = '\0';
 
+    // Tamanho do campo em si + tamanho do código `code`
+    *actual_size += len + 1;
+
     return status;
 }
 
@@ -240,12 +246,19 @@ static bool file_write_var_field(FILE *f, uint8_t code, char *data)
 
 bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *rec)
 {
-    #define X(T, name, ...) FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
-    #define Y(T, name, ...) FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name))
+    #define X(T, name, ...) \
+        FAIL_IF(fwrite(&rec->name, sizeof(T), 1, f) != 1)
+    #define Y(T, name, ...) \
+        FAIL_IF(!file_write_var_field(f, header->name##_code, rec->name, &actual_size) || actual_size > rec->size)
 
     #define METADATA_FIELD X
     #define FIXED_FIELD    X
     #define VAR_FIELD      Y
+
+    // O tamanho do que foi de fato escrito até então é inicializado com o
+    // tamanho da parte de tamanho fixo do registro (após o campo `size) e
+    // incrementado para cada campo de tamanho variável escrito
+    uint64_t actual_size = DATA_REC_SIZE_AFTER_SIZE_FIELD;
 
     // Escreve os campos de tamanho fixo diretamente, usando `fwrite` (X),
     // e os campos de tamanho variável usando a função `file_write_var_field`,
@@ -255,6 +268,14 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
 
     #undef X
     #undef Y
+
+    // Preenche o restante do registro com lixo ('$')
+    while (actual_size < rec->size) {
+        if (fputc('$', f) == EOF)
+            return false;
+
+        actual_size++;
+    }
 
     return true;
 }

@@ -47,6 +47,10 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec);
  * Escreve o registro de dados apontado por `rec` no arquivo
  * `f`, na posição atual, usando os códigos para os campos de
  * tamanho variável definidos no registro de cabeçalho `header`.
+ *
+ * Se o campo `size` for maior que o tamanho realmente ocupado pelo
+ * registro (o que pode acontecer em uma inserção ou atualização), a parte não
+ * ocupada será preenchida com '$' (lixo).
  */
 bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *rec);
 
