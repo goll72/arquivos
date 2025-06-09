@@ -1,2 +1,2 @@
 #!/bin/sh
-exec git diff --no-index -U100 "$@"
+exec git diff --no-index --no-prefix -U100 "$@"
