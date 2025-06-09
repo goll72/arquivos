@@ -41,3 +41,5 @@
  - [ ] Documentar a função `file_cleanup_after_modify`
 
  - [ ] Perguntar se os campos do nó da árvore B devem seguir os nomes da especificação
+
+ - [ ] `top` -> `head` (lista de registros logicamente removidos)
