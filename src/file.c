@@ -304,6 +304,34 @@ int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *filter, 
     return -1;
 }
 
+void file_traverse_seq(FILE *f, f_header_t *header, vset_t *filter, file_search_cb_t *cb, void *data)
+{
+    // Retorna à posição inicial, após o header
+    fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
+
+    f_data_rec_t rec = {};
+    bool unique = false;
+
+    long rec_off;
+
+    // Percorre o arquivo de dados, buscando um registro
+    // que satisfaça as condições de busca dadas no vset `filter`
+    while ((rec_off = file_search_seq_next(f, header, filter, &rec, &unique)) != -1) {
+        long next_rec_off = ftell(f);
+        fseek(f, rec_off, SEEK_SET);
+
+        cb(f, header, &rec, data);
+
+        rec_free_var_data_fields(&rec);
+
+        if (unique)
+            break;
+
+        // Devemos voltar para o offset do próximo registro para que a busca possa continuar
+        fseek(f, next_rec_off, SEEK_SET);
+    }
+}
+
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {
     #define HEADER_DESC_ARGS(name) (int)LEN_FIXED_STR(header->name##_desc), header->name##_desc

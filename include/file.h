@@ -70,6 +70,24 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
 int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_data_rec_t *rec, bool *unique);
 
 /**
+ * Função de callback chamada para cada registro
+ * válido encontrado pela função `file_traverse_seq`.
+ */
+typedef void file_search_cb_t(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data);
+
+/**
+ * Percorre o arquivo `f`, a partir do início, buscando por registros
+ * válidos que satisfaçam o filtro imposto pelo vset `filter`. Para cada
+ * um desses registros, chama a função de callback `cb`, passando-a os
+ * parâmetros `f`, `header`, `rec` e `data`.
+ *
+ * Essa função para de percorrer o arquivo assim que encontrar um registro
+ * se um dos campos sendo buscados tiver a flag `F_UNIQUE` (não permite valores
+ * repetidos).
+ */
+void file_traverse_seq(FILE *f, f_header_t *header, vset_t *filter, file_search_cb_t *cb, void *data);
+
+/**
  * Imprime os campos de dados do registro `rec`, usando as descrições
  * contidas no registro de cabeçalho `header`.
  */

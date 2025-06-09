@@ -239,6 +239,22 @@ static vset_t *vset_new_from_stdin(void)
     return vset;
 }
 
+/** Wrapper para a função `crud_delete` que aborta a execução em caso de erro. */
+void delete(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+{
+    if (!crud_delete(f, header, rec))
+        bail(E_PROCESSINGFILE);
+}
+
+/** Wrapper para a função `crud_update` que aborta a execução em caso de erro. */
+void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+{
+    vset_t *patch = data;
+
+    if (!crud_update(f, header, rec, patch))
+        bail(E_PROCESSINGFILE);
+}
+
 int main(void)
 {
     int func;
@@ -397,32 +413,7 @@ int main(void)
             for (int i = 0; i < n_queries; i++) {
                 vset_t *filter = vset_new_from_stdin();
 
-                // Retorna à posição inicial, após o header
-                fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
-
-                f_data_rec_t rec = {};
-                bool unique = false;
-
-                long rec_off;
-
-                // Percorre o arquivo de dados, buscando um registro
-                // que satisfaça as condições de busca dadas no vset `filter`
-                while ((rec_off = file_search_seq_next(f, &header, filter, &rec, &unique)) != -1) {
-                    long next_rec_off = ftell(f);
-
-                    fseek(f, rec_off, SEEK_SET);
-
-                    if (!crud_delete(f, &header, &rec))
-                        bail(E_PROCESSINGFILE);
-                    
-                    rec_free_var_data_fields(&rec);
-
-                    if (unique)
-                        break;
-
-                    // Devemos voltar para o offset do próximo registro para que a busca possa continuar
-                    fseek(f, next_rec_off, SEEK_SET);
-                }
+                file_traverse_seq(f, &header, filter, delete, NULL);
 
                 vset_free(filter);
             }
@@ -466,33 +457,7 @@ int main(void)
                 vset_t *filter = vset_new_from_stdin();
                 vset_t *patch = vset_new_from_stdin();
 
-                // Retorna à posição inicial, após o header
-                fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
-
-                f_data_rec_t rec;
-                bool unique = false;
-
-                long rec_off;
-
-                // XXX: juntar com o `FUNC_DELETE_WHERE` (quiçá `FUNC_SELECT_*`, mas
-                // nessas duas funcionalidades não há necessidade de usar `fseek` após
-                // a callback)                
-                while ((rec_off = file_search_seq_next(f, &header, filter, &rec, &unique)) != -1) {
-                    long next_rec_off = ftell(f);
-
-                    fseek(f, rec_off, SEEK_SET);
-
-                    if (!crud_update(f, &header, &rec, patch))
-                        bail(E_PROCESSINGFILE);
-                    
-                    rec_free_var_data_fields(&rec);
-
-                    if (unique)
-                        break;
-
-                    // Devemos voltar para o offset do próximo registro para que a busca possa continuar
-                    fseek(f, next_rec_off, SEEK_SET);
-                }
+                file_traverse_seq(f, &header, filter, update, patch);
 
                 vset_free(filter);
                 vset_free(patch);
