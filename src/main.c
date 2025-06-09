@@ -446,7 +446,8 @@ int main(void)
                 int64_t prev = -1;
                 int64_t next = -1;
 
-                // SYNC: XXX: ...
+                // Procura por um registro com espaço suficiente
+                // na lista de registros logicamente removidos
                 while (insert_off != -1) {
                     fseek(f, insert_off, SEEK_SET);
 
@@ -466,6 +467,13 @@ int main(void)
                     insert_off = next;
                 }
 
+                // `insert_off` pode ser `-1` em dois casos:
+                //
+                // - a lista de removidos está vazia; ou
+                // - não foi encontrado um registro com espaço suficiente na lista.
+                //
+                // Um desses casos entra em um laço que muda o valor de `rec.size`,
+                // o outro não, logo, devemos atribuir o valor de `rec.size` novamente aqui.
                 if (insert_off == -1) {
                     insert_off = header.next_byte_offset;
                     rec.size = actual_size;
