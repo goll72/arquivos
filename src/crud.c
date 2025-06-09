@@ -112,7 +112,6 @@ bool crud_delete(FILE *f, f_header_t *header, f_data_rec_t *rec)
     fseek(f, sizeof rec->size, SEEK_CUR);
     fwrite(&rec->next_removed_rec, sizeof rec->next_removed_rec, 1, f);
 
-    // XXX: verificar casos de erro
     return true;
 }
 

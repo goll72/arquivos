@@ -261,5 +261,7 @@ void consume_whitespace(FILE *f)
     // Ignoramos explicitamente o valor de retorno para suprimir warnings;
     // se essa função falhar, algum erro catastrófico ocorreu, erro esse
     // que será detectado em alguma outra parte do código (ex. `rec_parse`)
-    (void)fscanf(f, " ");
+    int _ = fscanf(f, " ");
+
+    (void)_;
 }

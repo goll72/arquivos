@@ -31,8 +31,6 @@ void vset_free(vset_t *);
 /**
  * Adiciona um valor ao vset.
  *
- * XXX: reescrever sem mencionar comparação
- *
  * Se o campo relevante for uma string (`T_STR`), a comparação
  * será feita dereferenciando o conteúdo do byte offset `offset`
  * da região de memória apontada por `obj`, tratando-o como um
@@ -57,7 +55,9 @@ bool vset_match_against(vset_t *vset, const void *obj, bool *unique);
 
 /**
  * Modifica os valores dos campos de `obj`, alterando-os para os valores
- * especificados em `vset`.
+ * especificados em `vset`. Para campos do tipo `T_STR`, aloca uma nova
+ * string, se necessário, liberando a string armazenada anteriormente,
+ * se houver.
  */
 void vset_patch(vset_t *vset, void *obj);
 

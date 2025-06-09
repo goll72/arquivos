@@ -149,7 +149,6 @@ void vset_patch(vset_t *vset, void *obj)
                 memcpy(buf, curr->buf, sizeof(float));
                 break;
             case T_STR: {
-                // XXX: ineficiente!!
                 char *str;
                 memcpy(&str, buf, sizeof str);
 

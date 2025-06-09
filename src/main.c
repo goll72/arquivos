@@ -318,6 +318,8 @@ int main(void)
             if (!file_write_header(bin_f, &header))
                 bail(E_PROCESSINGFILE);
 
+            // Enquanto não tiver chegado ao final do arquivo CSV,
+            // lê um registro e o escreve no arquivo de dados.
             while (true) {
                 bool eof;
 
