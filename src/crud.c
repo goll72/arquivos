@@ -22,16 +22,22 @@ bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
     while (insert_off != -1) {
         fseek(f, insert_off, SEEK_SET);
 
-        // SYNC: rec
         uint8_t removed;
-        fread(&removed, sizeof removed, 1, f);
+
+        // SYNC: rec
+        if (fread(&removed, sizeof removed, 1, f) != 1)
+            return false;
 
         if (removed != REC_REMOVED)
             return false;
 
         // SYNC: rec
-        fread(&rec->size, sizeof rec->size, 1, f);
-        fread(&next, sizeof next, 1, f);
+        if (fread(&rec->size, sizeof rec->size, 1, f) != 1)
+            return false;
+
+        // SYNC: rec
+        if (fread(&next, sizeof next, 1, f) != 1)
+            return false;
 
         // Encontramos um registro com espaço suficiente
         if (rec->size >= actual_size)
