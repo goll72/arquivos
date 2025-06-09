@@ -35,11 +35,11 @@
 
  - [ ] Explicar melhor parsing
 
- - [ ] Demarcar/anotar trechos de código que dependam da ordem dos campos
+ - [x] Demarcar/anotar trechos de código que dependam da ordem dos campos
        de um registro com `SYNC: <tag>`, explicar essa tag
 
- - [ ] Documentar a função `file_cleanup_after_modify`
+ - [x] Documentar a função `file_cleanup_after_modify`
 
  - [ ] Perguntar se os campos do nó da árvore B devem seguir os nomes da especificação
 
- - [ ] `top` -> `head` (lista de registros logicamente removidos)
+ - [x] ~~`top` -> `head` (lista de registros logicamente removidos)~~

@@ -19,10 +19,16 @@
 #define HEADER_FIELD(T, name, default)
 #endif
 
+/** SYNC: header */
+
 /** Assume o valor `STATUS_CONSISTENT` se o arquivo estiver consistente. */
 HEADER_FIELD(uint8_t,  status,   STATUS_INCONSISTENT)
 
-/** Topo da pilha de registros logicamente removidos, -1 indica que não há topo. */
+/**
+ * Cabeça da lista de registros logicamente removidos, -1 indica que a lista
+ * está vazia. Embora `top` não seja um nome muito semântico, foi escolhido
+ * por ser similar ao nome usado na especificação: `topo`.
+ */
 HEADER_FIELD(int64_t,  top,                       -1)
 
 /**

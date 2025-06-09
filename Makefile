@@ -2,7 +2,7 @@ CC = cc
 
 BUILD ?= build
 
-SRC = src/main.c src/file.c src/vset.c \
+SRC = src/main.c src/file.c src/vset.c src/crud.c \
       src/util/hash.c src/util/parse.c
 OBJ = $(SRC:src/%.c=$(BUILD)/%.o)
 DEP = $(OBJ:.o=.d)

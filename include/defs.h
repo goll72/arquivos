@@ -83,6 +83,8 @@ typedef struct {
  * que vem após o campo `size`. Usado para calcular o valor
  * desse campo ao criar um registro e para verificar se esse
  * valor é válido ao ler um registro.
+ *
+ * SYNC: rec
  */
 #define DATA_REC_SIZE_AFTER_SIZE_FIELD \
     (sizeof(PACKED(f_data_rec_t)) - offsetof(PACKED(f_data_rec_t), size) - sizeof(((PACKED(f_data_rec_t) *)0)->size))

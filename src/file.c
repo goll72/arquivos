@@ -280,7 +280,7 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
     return true;
 }
 
-int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_data_rec_t *rec, bool *unique)
+int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *filter, f_data_rec_t *rec, bool *unique)
 {
     long current = ftell(f);
 
@@ -290,12 +290,12 @@ int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *vset, f_
         if (!file_read_data_rec(f, header, rec))
             return -1;
 
-        // Nesse caso, o resto do registro não é lido, portanto
+        // Se o registro foi removido, o resto do registro não é lido, portanto
         // não precisamos chamar a função `rec_free_var_data_fields`
         if (rec->removed == REC_REMOVED)
             continue;
 
-        if (vset_match_against(vset, rec, unique))
+        if (vset_match_against(filter, rec, unique))
             return current;
 
         rec_free_var_data_fields(rec);

@@ -27,6 +27,8 @@
 #define VAR_FIELD(T, name, repr)
 #endif
 
+/** SYNC: rec */
+
 /** Assume o valor `REC_REMOVED` se o registro foi removido. */
 METADATA_FIELD(uint8_t,  removed,           _)
 

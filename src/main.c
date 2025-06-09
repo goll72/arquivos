@@ -5,6 +5,7 @@
 
 #include <stdnoreturn.h>
 
+#include "crud.h"
 #include "defs.h"
 #include "file.h"
 #include "vset.h"
@@ -13,6 +14,13 @@
 #include "util/hash.h"
 #include "util/parse.h"
 
+
+/**
+ * Trechos de código marcados com `SYNC: tag` são trechos que devem ser
+ * alterados concomitantemente, por dependerem de uma determinada ordem
+ * de campos de um registro, por exemplo, em vez de abstrair essa
+ * dependência de alguma forma.
+ */
 
 enum functionality {
     FUNC_CREATE_TABLE   =  1,
@@ -138,6 +146,11 @@ static FILE *file_open_from_stdin(f_header_t *header, const char *mode)
     return f;
 }
 
+/**
+ * Realiza a atualização do header e outras operações que devem ser feitas
+ * ao final do execução (apenas quando o arquivo tiver sido modificado),
+ * como imprimir o seu hash. Por fim, fecha o arquivo.
+ */
 static void file_cleanup_after_modify(FILE *f, f_header_t *header)
 {
     // Marca o arquivo como "limpo"/consistente
@@ -327,24 +340,24 @@ int main(void)
                 scanf_expect(1, "%d", &n_queries);
 
             for (int i = 0; i < n_queries; i++) {
-                vset_t *vset;
+                vset_t *filter;
 
                 // No primeiro caso, o conjunto de condições da query (vset) será
                 // o conjunto vazio, cujo (produto/E lógico) é (1/verdadeiro).
                 // Dessa forma, todos os registros serão buscados.
                 if (func == FUNC_SELECT_STAR)
-                    vset = vset_new();
+                    filter = vset_new();
                 else
-                    vset = vset_new_from_stdin();
+                    filter = vset_new_from_stdin();
 
                 f_data_rec_t rec = {};
                 bool unique = false;
                 bool no_matches = true;
 
-                // Retorna à posição inicial (após o header)
+                // Retorna à posição inicial, após o header
                 fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
-                while (file_search_seq_next(f, &header, vset, &rec, &unique) != -1) {
+                while (file_search_seq_next(f, &header, filter, &rec, &unique) != -1) {
                     file_print_data_rec(&header, &rec);
 
                     no_matches = false;
@@ -360,7 +373,7 @@ int main(void)
                         break;
                 }
 
-                vset_free(vset);
+                vset_free(filter);
 
                 if (no_matches) {
                     puts(E_NOREC);
@@ -382,8 +395,9 @@ int main(void)
             scanf_expect(1, "%d", &n_queries);
 
             for (int i = 0; i < n_queries; i++) {
-                vset_t *vset = vset_new_from_stdin();
+                vset_t *filter = vset_new_from_stdin();
 
+                // Retorna à posição inicial, após o header
                 fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
                 f_data_rec_t rec = {};
@@ -391,37 +405,26 @@ int main(void)
 
                 long rec_off;
 
-                while ((rec_off = file_search_seq_next(f, &header, vset, &rec, &unique)) != -1) {
-                    rec.removed = REC_REMOVED;
-                    rec.next_removed_rec = header.top;
-                    header.top = rec_off;
-
-                    // As modificações no registro de cabeçalho contido no arquivo são postergadas
-                    // para o momento em que o arquivo é fechado. Não há risco de corrupção
-                    // silenciosa do arquivo de dados, graças ao uso da flag de status.
-                    header.n_valid_recs--;
-                    header.n_removed_recs++;
-
+                // Percorre o arquivo de dados, buscando um registro
+                // que satisfaça as condições de busca dadas no vset `filter`
+                while ((rec_off = file_search_seq_next(f, &header, filter, &rec, &unique)) != -1) {
                     long next_rec_off = ftell(f);
 
-                    // Como devemos atualizar apenas os campos `removed` e `next_removed_rec`,
-                    // iremos apenas fazer as modificações diretamente, em vez de usar a função
-                    // `file_write_data_rec`, que escreve todo o registro.
                     fseek(f, rec_off, SEEK_SET);
 
-                    fwrite(&rec.removed, sizeof rec.removed, 1, f);
-                    fseek(f, sizeof rec.size, SEEK_CUR);
-                    fwrite(&rec.next_removed_rec, sizeof rec.next_removed_rec, 1, f);
-
+                    if (!crud_delete(f, &header, &rec))
+                        bail(E_PROCESSINGFILE);
+                    
                     rec_free_var_data_fields(&rec);
 
                     if (unique)
                         break;
 
+                    // Devemos voltar para o offset do próximo registro para que a busca possa continuar
                     fseek(f, next_rec_off, SEEK_SET);
                 }
 
-                vset_free(vset);
+                vset_free(filter);
             }
 
             file_cleanup_after_modify(f, &header);
@@ -435,68 +438,16 @@ int main(void)
             scanf_expect(1, "%d", &n_insertions);
 
             for (int i = 0; i < n_insertions; i++) {
+                // Necessário para descartar a quebra de linha delimitando
+                // a entrada, pois a função de parsing é estrita e iria rejeitar
+                // a entrada se esse(s) caractere(s) não fosse(m) descartado(s)
                 consume_whitespace(stdin);
 
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
-                uint64_t actual_size = rec.size;
-
-                int64_t insert_off = header.top;
-                int64_t prev = -1;
-                int64_t next = -1;
-
-                // Procura por um registro com espaço suficiente
-                // na lista de registros logicamente removidos
-                while (insert_off != -1) {
-                    fseek(f, insert_off, SEEK_SET);
-
-                    uint8_t removed;
-                    fread(&removed, sizeof removed, 1, f);
-
-                    if (removed != REC_REMOVED)
-                        bail(E_PROCESSINGFILE);
-
-                    fread(&rec.size, sizeof rec.size, 1, f);
-                    fread(&next, sizeof next, 1, f);
-
-                    if (rec.size >= actual_size)
-                        break;
-
-                    prev = insert_off;
-                    insert_off = next;
-                }
-
-                // `insert_off` pode ser `-1` em dois casos:
-                //
-                // - a lista de removidos está vazia; ou
-                // - não foi encontrado um registro com espaço suficiente na lista.
-                //
-                // Um desses casos entra em um laço que muda o valor de `rec.size`,
-                // o outro não, logo, devemos atribuir o valor de `rec.size` novamente aqui.
-                if (insert_off == -1) {
-                    insert_off = header.next_byte_offset;
-                    rec.size = actual_size;
-                }
-
-                fseek(f, insert_off, SEEK_SET);
-
-                if (!file_write_data_rec(f, &header, &rec))
+                if (!crud_insert(f, &header, &rec))
                     bail(E_PROCESSINGFILE);
-
-                if (insert_off == header.top) {
-                    header.top = next;
-                } else {
-                    fseek(f, prev + offsetof(PACKED(f_data_rec_t), next_removed_rec), SEEK_SET);
-                    fwrite(&next, sizeof next, 1, f);
-                }
-
-                header.n_valid_recs++;
-
-                if (insert_off == header.next_byte_offset)
-                    header.next_byte_offset = ftell(f);
-                else
-                    header.n_removed_recs--;
 
                 rec_free_var_data_fields(&rec);
             }
@@ -508,11 +459,43 @@ int main(void)
         case FUNC_UPDATE_WHERE: {
             FILE *f = file_open_from_stdin(&header, "rb+");
 
-            int n_updates;
-            scanf_expect(1, "%d", &n_updates);
+            int n_queries;
+            scanf_expect(1, "%d", &n_queries);
 
-            for (int i = 0; i < n_updates; i++) {
-                /* ... */
+            for (int i = 0; i < n_queries; i++) {
+                vset_t *filter = vset_new_from_stdin();
+                vset_t *patch = vset_new_from_stdin();
+
+                // Retorna à posição inicial, após o header
+                fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
+
+                f_data_rec_t rec;
+                bool unique = false;
+
+                long rec_off;
+
+                // XXX: juntar com o `FUNC_DELETE_WHERE` (quiçá `FUNC_SELECT_*`, mas
+                // nessas duas funcionalidades não há necessidade de usar `fseek` após
+                // a callback)                
+                while ((rec_off = file_search_seq_next(f, &header, filter, &rec, &unique)) != -1) {
+                    long next_rec_off = ftell(f);
+
+                    fseek(f, rec_off, SEEK_SET);
+
+                    if (!crud_update(f, &header, &rec, patch))
+                        bail(E_PROCESSINGFILE);
+                    
+                    rec_free_var_data_fields(&rec);
+
+                    if (unique)
+                        break;
+
+                    // Devemos voltar para o offset do próximo registro para que a busca possa continuar
+                    fseek(f, next_rec_off, SEEK_SET);
+                }
+
+                vset_free(filter);
+                vset_free(patch);
             }
 
             file_cleanup_after_modify(f, &header);
