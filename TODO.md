@@ -27,7 +27,7 @@
 
  - [x] Mover `file_search_seq_next` para `file.c`
 
- - [ ] Criar um arquivo `crud.c` com as operações insert/delete/update (in-place)
+ - [x] Criar um arquivo `crud.c` com as operações insert/delete/update (in-place)
 
  - [ ] Explicar melhor vsets
 
