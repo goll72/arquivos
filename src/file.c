@@ -280,6 +280,8 @@ bool file_write_data_rec(FILE *f, const f_header_t *header, const f_data_rec_t *
     return true;
 }
 
+/* clang-format on */
+
 int64_t file_search_seq_next(FILE *f, const f_header_t *header, vset_t *filter, f_data_rec_t *rec, bool *unique)
 {
     long current = ftell(f);
@@ -331,6 +333,8 @@ void file_traverse_seq(FILE *f, f_header_t *header, vset_t *filter, file_search_
         fseek(f, next_rec_off, SEEK_SET);
     }
 }
+
+/* clang-format off */
 
 void file_print_data_rec(const f_header_t *header, const f_data_rec_t *rec)
 {

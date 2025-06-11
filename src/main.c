@@ -82,7 +82,7 @@ static void rec_parse(FILE *f, enum f_type ftype, f_data_rec_t *rec)
     rec->next_removed_rec = -1;
 
     #define READ_COMMON(T, name)                                      \
-        if (!parse_field(f, ftype, GET_TYPEINFO(T), &rec->name)) \
+        if (!parse_field(f, ftype, GET_TYPEINFO(T), &rec->name))      \
             bail(E_PROCESSINGFILE);
 
     #define FIXED_FIELD(T, name, ...) READ_COMMON(T, name)
