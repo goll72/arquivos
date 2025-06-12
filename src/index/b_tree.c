@@ -7,7 +7,6 @@
 #include <stdalign.h>
 
 #include "index/b_tree.h"
-#include "defs.h"
 
 #define FAIL_IF(x) \
     if (x)         \
@@ -88,7 +87,9 @@ typedef struct {
     alignas(uint32_t) char data[PAGE_SIZE];
 } b_tree_page_t;
 
-/** Ponteiro para o tipo do nó `p` */
+/** Para as macros a seguir, `p` deve ser um `b_tree_page_t *`. */
+
+/** Ponteiro para o tipo do nó */
 #define NODE_TYPE_P(p) ((uint32_t *)&(p)->data[0])
 /** Ponteiro para o tamanho do nó (quantidade de chaves armazenadas) */
 #define NODE_LEN_P(p)  ((uint32_t *)&(p)->data[4])
@@ -134,12 +135,17 @@ struct b_tree_index {
     b_tree_page_t root;
 };
 
+/**
+ * Campos do registro de cabeçalho, na ordem
+ * em que aparecem na árvore B.
+ */
 #define HEADER_FIELDS(X)  \
     X(uint8_t,  status)   \
     X(uint32_t, root_rrn) \
     X(uint32_t, next_rrn) \
     X(uint32_t, n_pages)
 
+/** Tipos "packed"/"empacotados"; vd. `defs.h` */
 #define PACKED(T) packed_##T
 
 #define X(T, name) T name;
@@ -154,11 +160,26 @@ typedef struct {
 
 #undef X
 
+/**
+ * Verifica que as macros `SIZE_LEFT` e `SUBNODE_SKIP`
+ * foram definidas corretamente
+ */
+static_assert(SIZE_LEFT + SUBNODE_SKIP == sizeof(PACKED(b_tree_subnode_t)), "SIZE_LEFT + SUBNODE_SKIP");
+
+/**
+ * Retorna o RRN da próxima página disponível e a incrementa.
+ * Essa função não aloca espaço para a página e não escreve
+ * no arquivo de dados da árvore B.
+ */
 static uint32_t b_tree_new_page(b_tree_index_t *tree)
 {
     return tree->next_rrn++;
 }
 
+/**
+ * Inicializa a página `page` com valores padrão. Para o
+ * tipo do nó, usa `NODE_TYPE_LEAF`.
+ */
 static void b_tree_init_page(b_tree_page_t *page)
 {
     char *p = NODE_DATA_P(page);
@@ -171,16 +192,17 @@ static void b_tree_init_page(b_tree_page_t *page)
     *p++ = -1;
     
     // Inicializa os demais campos (o valor padrão para todos é -1)
-    while ((char *)p + SUBNODE_SKIP < end)
+    while (p + SUBNODE_SKIP < end)
         *p++ =  -1;
 
 #if TREE_PAGE_NEEDS_PADDING
     // Preenche o espaço que sobrar na página com '$'
-    for (char *q = (char *)p; q != end; q++)
+    for (char *q = p; q != end; q++)
         *q = '$';
 #endif
 }
 
+/** Lê o registro de cabeçalho da árvore B, a partir do arquivo ds dados. */
 static bool b_tree_read_header(b_tree_index_t *tree)
 {
     fseek(tree->file, 0L, SEEK_SET);
@@ -194,6 +216,7 @@ static bool b_tree_read_header(b_tree_index_t *tree)
     return true;
 }
 
+/** Escreve os dados do registro de cabeçalho da árvore B no arquivo de dados. */
 static bool b_tree_write_header(b_tree_index_t *tree)
 {
     fseek(tree->file, 0L, SEEK_SET);
@@ -426,8 +449,8 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
     // NOTE: uma das chaves é promovida, logo, não entra
     // na contagem da quantidade de chaves que serão
     // redistribuídas entre os dois nós
-    static const uint32_t len_right = (N_KEYS - 1) / 2;
-    static const uint32_t len_left = N_KEYS - 1 - len_right;
+    uint32_t len_right = (N_KEYS - 1) / 2;
+    uint32_t len_left = N_KEYS - 1 - len_right;
 
     b_tree_get_subnode(page, len_left, promoted);
 
@@ -490,6 +513,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
             // Split
             int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, promoted);
+            // XXX: wrong: we don't know if ins_index is on page or &new
             b_tree_put_subnode(page, ins_index, &sub);
 
             promoted->left = page_rrn;
@@ -519,6 +543,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     bool was_promoted = b_tree_insert_impl(tree, next_rrn, key, offset, promoted);
 
     if (was_promoted) {
+        // XXX: is this correct?
         if (next_rrn == sub.right)
             ins_index = ins_index + 1;
         
@@ -543,6 +568,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
             // Split
             int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, promoted);
+            // XXX: wrong: we don't know if ins_index is on page or &new
             b_tree_put_subnode(page, ins_index, &sub);
 
             // XXX: idk if this is right atp
