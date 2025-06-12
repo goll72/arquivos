@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -13,13 +15,12 @@
         return false;
 
 /**
- * Implementação de uma árvore B flexível quanto ao tamanho da página:
- * basta alterar o valor da macro `PAGE_SIZE` para usar um tamanho
- * diferente de página de disco.
+ * Implementação de uma árvore B genérica, flexível quanto ao tamanho
+ * da página: basta alterar o valor da macro `PAGE_SIZE` para usar um
+ * tamanho diferente de página de disco.
  */
 
-#define PAGE_SIZE   44
-#define HEADER_SIZE PAGE_SIZE
+#define PAGE_SIZE 44
 
 #define B_STATUS_INCONSISTENT '0'
 #define B_STATUS_CONSISTENT   '1'
@@ -61,8 +62,6 @@ typedef struct {
  */
 #define SIZE_LEFT    4 /* sizeof left */
 
-static_assert(SIZE_LEFT == sizeof ((b_tree_subnode_t *)0)->left, "SIZE_LEFT");
-
 /**
  * Quantidade de bytes a serem pulados para ir de um "subnó" para o
  * próximo em uma página. Não inclui o campo `left` devido à sobreposição
@@ -70,17 +69,17 @@ static_assert(SIZE_LEFT == sizeof ((b_tree_subnode_t *)0)->left, "SIZE_LEFT");
  */
 #define SUBNODE_SKIP (4 /* sizeof key */ + 8 /* sizeof offset */ + 4 /* sizeof right */)
 
+/** Quantidade de bytes ocupados por metadados nas páginas da árvore */
+#define PAGE_META_SIZE (4 /* sizeof type */ + 4 /* sizeof len */)
+
 /** Quantidade de chaves que podem ser armazenadas em um nó/uma página da árvore */
-#define N_KEYS ((PAGE_SIZE - SIZE_LEFT) / SUBNODE_SKIP)
+#define N_KEYS ((PAGE_SIZE - PAGE_META_SIZE - SIZE_LEFT) / SUBNODE_SKIP)
 
 /** Ordem da árvore */
 #define TREE_ORDER (N_KEYS + 1)
 
 /** Verdadeiro se houver espaço no final da página da árvore, que deverá ser preenchido com '$' */
-#define TREE_PAGE_NEEDS_PADDING N_KEYS * SUBNODE_SKIP + SIZE_LEFT < PAGE_SIZE
-
-/** Para esse trabalho, a ordem da árvore deve ser 3 */
-static_assert(TREE_ORDER == 3, "TREE_ORDER");
+#define TREE_PAGE_NEEDS_PADDING N_KEYS * SUBNODE_SKIP + SIZE_LEFT < PAGE_SIZE - PAGE_META_SIZE
 
 /** Guarda uma página (nó) da árvore B */
 typedef struct {
@@ -128,6 +127,12 @@ struct b_tree_index {
      */
     bool root_dirty;
 
+    /**
+     * Se o arquivo de dados da árvore B foi aberto de modo
+     * a permitir modificação.
+     */
+    bool mode_is_modify;
+
     /** Status do arquivo de dados da árvore */
     uint8_t status;
 
@@ -145,6 +150,10 @@ struct b_tree_index {
     X(uint32_t, next_rrn) \
     X(uint32_t, n_pages)
 
+#define HEADER_SIZE (1 /* sizeof status */ + 4 /* sizeof root_rrn */ + 4 /* sizeof next_rrn */ + 4 /* sizeof n_pages */)
+
+#define HEADER_PAGE_NEEDS_PADDING HEADER_SIZE < PAGE_SIZE
+
 /** Tipos "packed"/"empacotados"; vd. `defs.h` */
 #define PACKED(T) packed_##T
 
@@ -160,10 +169,14 @@ typedef struct {
 
 #undef X
 
+/** Para esse trabalho, a ordem da árvore deve ser 3 */
+static_assert(TREE_ORDER == 3, "TREE_ORDER");
+
 /**
  * Verifica que as macros `SIZE_LEFT` e `SUBNODE_SKIP`
  * foram definidas corretamente
  */
+static_assert(SIZE_LEFT == sizeof ((b_tree_subnode_t *)0)->left, "SIZE_LEFT");
 static_assert(SIZE_LEFT + SUBNODE_SKIP == sizeof(PACKED(b_tree_subnode_t)), "SIZE_LEFT + SUBNODE_SKIP");
 
 /**
@@ -173,7 +186,10 @@ static_assert(SIZE_LEFT + SUBNODE_SKIP == sizeof(PACKED(b_tree_subnode_t)), "SIZ
  */
 static uint32_t b_tree_new_page(b_tree_index_t *tree)
 {
-    return tree->next_rrn++;
+    uint32_t rrn = tree->next_rrn++;
+    tree->n_pages++;
+
+    return rrn;
 }
 
 /**
@@ -189,11 +205,14 @@ static void b_tree_init_page(b_tree_page_t *page)
     *NODE_LEN_P(page) = 0;
 
     // Inicializa o campo `left`
-    *p++ = -1;
+    memset(p, -1, SIZE_LEFT);
+    p += SIZE_LEFT;
     
     // Inicializa os demais campos (o valor padrão para todos é -1)
-    while (p + SUBNODE_SKIP < end)
-        *p++ =  -1;
+    while (p + SUBNODE_SKIP <= end) {
+        memset(p, -1, SUBNODE_SKIP);
+        p += SUBNODE_SKIP;
+    }
 
 #if TREE_PAGE_NEEDS_PADDING
     // Preenche o espaço que sobrar na página com '$'
@@ -202,7 +221,7 @@ static void b_tree_init_page(b_tree_page_t *page)
 #endif
 }
 
-/** Lê o registro de cabeçalho da árvore B, a partir do arquivo ds dados. */
+/** Lê o registro de cabeçalho da árvore B, a partir do arquivo de dados. */
 static bool b_tree_read_header(b_tree_index_t *tree)
 {
     fseek(tree->file, 0L, SEEK_SET);
@@ -227,7 +246,10 @@ static bool b_tree_write_header(b_tree_index_t *tree)
 
     #undef X
 
-    // XXX: escrever cifrões/lixo ('$')
+#if HEADER_PAGE_NEEDS_PADDING
+    for (size_t i = HEADER_SIZE; i < PAGE_SIZE; i++)
+        fputc('$', tree->file);
+#endif
 
     return true;
 }
@@ -251,19 +273,18 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
     if (!file)
         return NULL;
 
-    bool mode_is_modify = strchr(mode, 'w') || strchr(mode, '+');
-    
     b_tree_index_t *tree = malloc(sizeof *tree);
 
     tree->file = file;
     tree->root_dirty = false;
+    tree->mode_is_modify = strchr(mode, 'w') || strchr(mode, '+');
 
     if (!b_tree_read_header(tree)) {
         // Assumimos que o arquivo está vazio e o inicializamos.
         // 
         // Se o arquivo não foi aberto de modo a permitir modificação
         // e não possui cabeçalho válido, isso é considerado um erro
-        if (!mode_is_modify) {
+        if (!tree->mode_is_modify) {
             b_tree_close(tree);
             return NULL;
         }
@@ -283,7 +304,7 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
         b_tree_read_page(tree, tree->root_rrn, &tree->root);
     }
 
-    if (mode_is_modify) {
+    if (tree->mode_is_modify) {
         tree->status = B_STATUS_INCONSISTENT;
 
         fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
@@ -298,11 +319,12 @@ void b_tree_close(b_tree_index_t *tree)
     if (tree->root_dirty)
         b_tree_write_page(tree, tree->root_rrn, &tree->root);
 
-    tree->status = B_STATUS_CONSISTENT;
+    if (tree->mode_is_modify) {
+        tree->status = B_STATUS_CONSISTENT;
 
-    // XXX: tenta escrever mesmo se o arquivo foi aberto apenas para leitura
-    fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
-    fwrite(&tree->status, sizeof tree->status, 1, tree->file);
+        fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
+        fwrite(&tree->status, sizeof tree->status, 1, tree->file);
+    }
 
     fclose(tree->file);
     free(tree);
@@ -364,13 +386,16 @@ static void b_tree_put_subnode(b_tree_page_t *page, uint32_t index, b_tree_subno
  */
 static uint32_t b_tree_bin_search(const b_tree_page_t *page, uint32_t key, b_tree_subnode_t *sub)
 {
-    uint32_t len = *(uint32_t *)NODE_LEN_P(page);
+    uint32_t len = *NODE_LEN_P(page);
+    
     uint32_t low = 0;
     uint32_t high = len;
 
     uint32_t prev = low + (high - low + 1) / 2;
     uint32_t mid = 0;
-    
+
+    // Mesmo essa árvore sendo uma árvore genérica,
+    // sempre haverá pelo menos uma chave por nó.
     b_tree_get_subnode(page, mid, sub);
 
     while (true) {
@@ -384,7 +409,7 @@ static uint32_t b_tree_bin_search(const b_tree_page_t *page, uint32_t key, b_tre
         prev = mid;
         mid = low + (high - low + 1) / 2;
 
-        if (prev == mid)
+        if (mid == prev || mid == len)
             break;
 
         b_tree_get_subnode(page, mid, sub);
@@ -423,53 +448,10 @@ bool b_tree_search(b_tree_index_t *tree, uint32_t key, uint64_t *offset)
 }
 
 /**
- * Realiza a operação "split" de uma página `page` da árvore B em duas,
- * redistribuindo as chaves uniformemente e promovendo uma chave. Deve
- * haver espaço para uma página da árvore B em `new`, `ins_index` deve
- * ser o índice onde será inserida uma chave.
- *
- * Guarda em `*promoted` os dados da chave que foi promovida.
- *
- * XXX: leave space at ins_index and take into account that it may be on
- * the right page rather than on the left
- */
-int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new, uint32_t ins_index, b_tree_subnode_t *promoted)
-{
-    int32_t new_rrn = b_tree_new_page(tree);
-    b_tree_init_page(new);
-
-    if (*NODE_TYPE_P(page) == NODE_TYPE_ROOT)
-        *NODE_TYPE_P(page) = NODE_TYPE_INTM;
-
-    *NODE_TYPE_P(new) = *NODE_TYPE_P(page);
-
-    // O nó da esquerda deve sempre ficar com uma chave
-    // a mais, se a quantidade de chaves for par
-    //
-    // NOTE: uma das chaves é promovida, logo, não entra
-    // na contagem da quantidade de chaves que serão
-    // redistribuídas entre os dois nós
-    uint32_t len_right = (N_KEYS - 1) / 2;
-    uint32_t len_left = N_KEYS - 1 - len_right;
-
-    b_tree_get_subnode(page, len_left, promoted);
-
-    // Adicionamos 1 para que a chave a ser promovida não seja copiada
-    char *src = NODE_DATA_P(page) + SUBNODE_SKIP * (len_left + 1);
-    char *dest = NODE_DATA_P(new);
-
-    size_t len = SIZE_LEFT + len_right * SUBNODE_SKIP;
-
-    memcpy(dest, src, len);
-    // Queremos apagar a chave promovida
-    memset(src - SUBNODE_SKIP, -1, len + SUBNODE_SKIP);
-
-    *NODE_LEN_P(page) = len_left;
-    *NODE_LEN_P(new) = len_right;
-
-    return new_rrn;
-}
-
+ * Insere o subnó `sub` na posição `index` da página `page` da árvore B,
+ * deslocando os nós à direita, se necessário, e incrementando o tamanho
+ * (quantidade de nós armazenados) da página.
+ */ 
 static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_tree_subnode_t *sub)
 {
     // XXX: this can overflow
@@ -484,6 +466,140 @@ static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_t
     b_tree_put_subnode(page, index, sub);
 
     *NODE_LEN_P(page) += 1;
+}
+
+/**
+ * Realiza a operação "split" de uma página `page` da árvore B em duas,
+ * redistribuindo as chaves uniformemente e promovendo uma chave. Deve
+ * haver espaço para uma página da árvore B em `new`, e `ins_index` deve
+ * ser o índice onde será inserida uma chave.
+ *
+ * Guarda em `*promoted` os dados da chave que foi promovida.
+ *
+ * XXX: leave space at ins_index and take into account that it may be on
+ * the right page rather than on the left
+ */
+int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new,
+                          uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
+{
+    int32_t new_rrn = b_tree_new_page(tree);
+    b_tree_init_page(new);
+
+    if (*NODE_TYPE_P(page) == NODE_TYPE_ROOT)
+        *NODE_TYPE_P(page) = NODE_TYPE_INTM;
+
+    *NODE_TYPE_P(new) = *NODE_TYPE_P(page);
+
+    // O nó da esquerda deve sempre ficar com uma chave
+    // a mais, se a quantidade de chaves for par
+    //
+    // NOTE: uma das chaves é promovida, logo, não entra
+    // na contagem da quantidade de chaves que serão
+    // redistribuídas entre os dois nós. No entanto, há
+    // outra chave que está sendo inserida nesse nó
+    // (armazenada em `sub`) que deve ser considerada.
+    uint32_t len_right = N_KEYS / 2;
+    uint32_t len_left = N_KEYS - len_right;
+
+    *NODE_LEN_P(new) = len_right;
+
+    // Verifica se o novo nó a ser inserido deverá ficar
+    // na página à esquerda (`page`) ou à direita (`new`)
+    if (ins_index < len_left) {
+        // Promove o nó que seria o primeiro nó da direita se o split
+        // e a promoção fossem realizados em etapas separadas
+        b_tree_get_subnode(page, len_left, promoted);
+
+        char *const src = NODE_DATA_P(page) + SUBNODE_SKIP * (len_left + 1);
+        char *const dest = NODE_DATA_P(new);
+
+        size_t len = len_right
+                         ? SIZE_LEFT + len_right * SUBNODE_SKIP
+                         : 0;
+
+        // Copia a parte da página da esquerda que agora
+        // deve ficar à direita para a página da direita
+        memcpy(dest, src, len);
+        // Queremos apagar a chave promovida
+        memset(src - SUBNODE_SKIP, -1, SUBNODE_SKIP);
+
+        // Essa quantidade será corrigida pela função `b_tree_shift_insert_subnode`
+        *NODE_LEN_P(page) = len_left - 1;
+
+        b_tree_shift_insert_subnode(page, ins_index, sub);
+
+        return new_rrn;
+    }
+
+    *NODE_LEN_P(page) = len_left;
+
+    // Índice onde a inserção deveria ocorrer (já determinamos
+    // que a inserção deve ocorrer na página à direita, `new`)
+    // se a inserção e a promoção fossem etapas separadas, com
+    // a promoção e o deslocamento ocorrendo após a inserção.
+    ins_index -= len_left;
+
+    // Origem (região de `page` a ser copiada para `new`)
+    char *const src = NODE_DATA_P(page) + SUBNODE_SKIP * len_left;
+    // Destino (região de `new` que receberá o conteúdo copiado de `page`)
+    char *const dest = NODE_DATA_P(new);
+
+    // Tamanho da região a ser copiada
+    size_t len = SIZE_LEFT + len_right * SUBNODE_SKIP;
+
+    if (ins_index == 0) {
+        // O nó que recebemos para inserção foi o nó escolhido para promoção
+        memcpy(promoted, sub, sizeof *sub);
+
+        // Copia a parte da página da esquerda que agora
+        // deve ficar à direita para a página da direita
+        memcpy(dest, src, len);
+    } else {
+        // Promove o nó que seria o primeiro nó da direita se o split
+        // e a promoção fossem realizados em etapas separadas
+        b_tree_get_subnode(page, len_left, promoted);
+
+        // Devemos decrementar o índice de inserção, pois estamos
+        // realizando a promoção antes de fazer a inserção
+        ins_index--;
+        
+        // Realiza duas cópias separadas, da parte "predecessora"
+        // e da parte "sucessora" ao índice de inserção ,deixando
+        // um espaço em `ins_index` na página à direita para que
+        // seja possível realizar a inserção. Dessa forma, copiamos
+        // cada chave apenas uma vez, em vez de duas (caso fosse
+        // feita uma cópia convencional seguida de um deslocamento)
+        char *const src_prec = src;
+        char *const dest_prec = dest;
+        
+        size_t len_prec = ins_index
+                              ? SIZE_LEFT + ins_index * SUBNODE_SKIP
+                              : 0;
+
+        memcpy(dest_prec, src_prec, len_prec);
+
+        char *src_succ = src_prec + len_prec;
+        // Adicionamos `SUBNODE_SKIP` para deixar espaço para inserir o nó em `ins_index`
+        char *dest_succ = dest_prec + len_prec + SUBNODE_SKIP;
+
+        // Subtraímos 1 do tamanho para considerar o nó que será inserido em `ins_index`
+        size_t len_succ = len_right - ins_index - 1 > 0
+                              ? SIZE_LEFT + (len_right - ins_index - 1) * SUBNODE_SKIP
+                              : 0;
+
+        memcpy(dest_succ, src_succ, len_succ);
+
+        // Realiza a inserção em `ins_index`
+        b_tree_put_subnode(new, ins_index, sub);
+    }
+
+    // Apaga a parte da página `page` que foi copiada para `new`
+    // 
+    // NOTE: adicionamos `SIZE_LEFT` para que o filho direito do
+    // último subnó não seja apagado
+    memset(src + SIZE_LEFT, -1, len - SIZE_LEFT);
+    
+    return new_rrn;
 }
 
 /** Implementa a inserção de fato, de forma recursiva; vd. `b_tree_insert`. */
@@ -512,9 +628,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
             b_tree_page_t new;
 
             // Split
-            int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, promoted);
-            // XXX: wrong: we don't know if ins_index is on page or &new
-            b_tree_put_subnode(page, ins_index, &sub);
+            int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, &sub, promoted);
 
             promoted->left = page_rrn;
             promoted->right = new_rrn;
@@ -562,16 +676,13 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
             //
             // Como já não precisamos de `sub` (originalmente usado para a inserção, no entanto
             // a inserção já foi feita --- estamos na volta da recursão), copiamos o nó promovido
-            // de um nível inferior para `sub`, realizamos o "split" e então inserimos `sub` na
-            // posição desejada. 
+            // de um nível inferior para `sub` e realizamos o "split" (que já irá inserir `sub`
+            // na posição desejada)
             memcpy(&sub, promoted, sizeof sub);
 
             // Split
-            int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, promoted);
-            // XXX: wrong: we don't know if ins_index is on page or &new
-            b_tree_put_subnode(page, ins_index, &sub);
+            int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, &sub, promoted);
 
-            // XXX: idk if this is right atp
             promoted->left = page_rrn;
             promoted->right = new_rrn;
 
