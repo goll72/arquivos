@@ -54,8 +54,8 @@ bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
     // - a lista de removidos está vazia; ou
     // - não foi encontrado um registro com espaço suficiente na lista.
     //
-    // Um desses casos entra em um laço que muda o valor de `rec.size`,
-    // o outro não, logo, devemos atribuir o valor de `rec.size` novamente aqui.
+    // Um desses casos entra em um laço que muda o valor de `rec->size`,
+    // o outro não, logo, devemos atribuir o valor de `rec->size` novamente aqui.
     if (insert_off == -1) {
         insert_off = header->next_byte_offset;
         rec->size = actual_size;
