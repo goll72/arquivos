@@ -479,7 +479,7 @@ static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_t
     char *src = base;
     char *dest = base + SUBNODE_SKIP;
 
-    size_t len = SUBNODE_SKIP * (*NODE_LEN_P(page) - index);
+    size_t len = SIZE_LEFT + SUBNODE_SKIP * (*NODE_LEN_P(page) - index);
 
     memmove(dest, src, len);
 
@@ -525,9 +525,9 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
     if (ins_index < len_left) {
         // Promove o nó que seria o primeiro nó da direita se o split
         // e a promoção fossem realizados em etapas separadas
-        b_tree_get_subnode(page, len_left, promoted);
+        b_tree_get_subnode(page, len_left - 1, promoted);
 
-        char *const src = NODE_DATA_P(page) + (len_left + 1) * SUBNODE_SKIP;
+        char *const src = NODE_DATA_P(page) + len_left * SUBNODE_SKIP;
         char *const dest = NODE_DATA_P(new);
 
         size_t len = len_right
@@ -633,10 +633,11 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         // Índice onde a inserção irá ocorrer, se houver espaço
         uint32_t ins_index = len ? b_tree_bin_search(page, key, &sub) : 0;
 
+        sub.key = key;
+        sub.offset = offset;
+
         if (len < N_KEYS) {
             sub.left = -1;
-            sub.key = key;
-            sub.offset = offset;
             // << Queremos preservar o valor de sub.right
 
             // Insere ordenado
@@ -646,6 +647,8 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
             return false;
         } else {
+            // << Queremos preservar os valores de sub.left e sub.right
+
             b_tree_page_t new;
 
             // Split
