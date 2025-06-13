@@ -20,7 +20,7 @@ run: $(EXE)
 	$(EXE)
 
 zip: | $(BUILD)/
-	zip -MM -r $(ZIP) . -i '*.c' '*.h' Makefile
+	zip -MM -r $(ZIP) . -i 'src/*.c' 'include/*.h' Makefile
 
 clean:
 	@rm -f $(OBJ) $(DEP) $(EXE) $(ZIP) $(GEN)
