@@ -56,8 +56,8 @@ bool vset_match_against(vset_t *vset, const void *obj, bool *unique);
 /**
  * Modifica os valores dos campos de `obj`, alterando-os para os valores
  * especificados em `vset`. Para campos do tipo `T_STR`, aloca uma nova
- * string, se necessário, liberando a string armazenada anteriormente,
- * se houver.
+ * string, se necessário, liberando a string armazenada anteriormente
+ * naquela posição em `obj`, se houver.
  */
 void vset_patch(vset_t *vset, void *obj);
 

@@ -192,13 +192,13 @@ static vset_t *vset_new_from_stdin(void)
         scanf_expect(1, "%s", field_repr);
 
         // Recupera metadados sobre o campo que serão usados para
-        // realizar a query: offset do campo na struct `f_data_rec_t`
-        // e seu tipo (um `enum typeinfo`).
+        // realizar a comparação: offset do campo na struct
+        // `f_data_rec_t`, seu tipo (um `enum typeinfo`) e flags.
         if (!data_rec_typeinfo(field_repr, &offset, &info, &flags))
             bail(E_PROCESSINGFILE);
 
-        // Irá guardar o valor referência para comparação na query
-        void *buf = NULL;
+        // Irá guardar o valor referência para comparação do campo atual
+        void *val = NULL;
 
         // Usado para que possamos fazer a leitura de uma string (`T_STR`)
         // alocada dinamicamente. Irá apontar para a string alocada
@@ -206,47 +206,46 @@ static vset_t *vset_new_from_stdin(void)
         char *str;
 
         // Reserva espaço para guardar o valor que será lido (e posteriormente
-        // usado na query), de acordo com o tipo do campo. Todos os valores
-        // passados para a query devem ser alocados dinamicamente. No entanto,
+        // usado na comparação), de acordo com o tipo do campo. Todos os valores
+        // passados para o vset devem ser alocados dinamicamente. No entanto,
         // campos do tipo `T_STR` já são alocados dinamicamente pela função
-        // `parse_field`, logo só precisamos guardar o ponteiro
-        // temporariamente.
+        // `parse_field`, logo, só precisamos guardar o ponteiro temporariamente.
         switch (info) {
             case T_U32:
-                buf = malloc(sizeof(uint32_t));
+                val = malloc(sizeof(uint32_t));
                 break;
             case T_FLT:
-                buf = malloc(sizeof(float));
+                val = malloc(sizeof(float));
                 break;
             case T_STR:
-                buf = &str;
+                val = &str;
                 break;
         }
 
-        if (!parse_field(stdin, F_TYPE_UNDELIM, info, buf))
+        if (!parse_field(stdin, F_TYPE_UNDELIM, info, val))
             bail(E_PROCESSINGFILE);
 
         if (info == T_STR)
-            buf = str;
+            val = str;
 
         // Adiciona um valor ao vset.
         //
         // Esse valor será comparado com o valor na posição `offset` da struct
         // `f_data_rec_t`, usando o tipo dado por `info` para realizar a comparação.
-        vset_add_value(vset, offset, info, flags, buf);
+        vset_add_value(vset, offset, info, flags, val);
     }
 
     return vset;
 }
 
-/** Wrapper para a função `crud_delete` que aborta a execução em caso de erro. */
+/** Wrapper para a função `crud_delete` que aborta a execução em caso de erro */
 void delete(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 {
     if (!crud_delete(f, header, rec))
         bail(E_PROCESSINGFILE);
 }
 
-/** Wrapper para a função `crud_update` que aborta a execução em caso de erro. */
+/** Wrapper para a função `crud_update` que aborta a execução em caso de erro */
 void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 {
     vset_t *patch = data;
@@ -360,7 +359,7 @@ int main(void)
             for (int i = 0; i < n_queries; i++) {
                 vset_t *filter;
 
-                // No primeiro caso, o conjunto de condições da query (vset) será
+                // No primeiro caso, o conjunto de condições do filtro (vset) será
                 // o conjunto vazio, cujo (produto/E lógico) é (1/verdadeiro).
                 // Dessa forma, todos os registros serão buscados.
                 if (func == FUNC_SELECT_STAR)
@@ -386,7 +385,7 @@ int main(void)
                     // e um registro foi encontrado, parar a busca
                     //
                     // NOTE: `unique` nunca será verdadeiro quando o conjunto
-                    // de condições da query for vazio.
+                    // de valores do filtro for vazio.
                     if (unique)
                         break;
                 }
@@ -415,6 +414,9 @@ int main(void)
             for (int i = 0; i < n_queries; i++) {
                 vset_t *filter = vset_new_from_stdin();
 
+                // Percorre o arquivo sequencialmente, chamando a função `delete`
+                // para cada um dos registros válidos (não removidos) encontrados
+                // que passam no filtro `filter`
                 file_traverse_seq(f, &header, filter, delete, NULL);
 
                 vset_free(filter);
@@ -439,6 +441,8 @@ int main(void)
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
+                // Insere o registro `rec` no arquivo, seguindo
+                // as regras do algoritmo de reuso de espaço
                 if (!crud_insert(f, &header, &rec))
                     bail(E_PROCESSINGFILE);
 
@@ -459,6 +463,9 @@ int main(void)
                 vset_t *filter = vset_new_from_stdin();
                 vset_t *patch = vset_new_from_stdin();
 
+                // Percorre o arquivo sequencialmente, chamando a função `update`
+                // para cada um dos registros válidos (não removidos) encontrados
+                // que passam no filtro `filter`
                 file_traverse_seq(f, &header, filter, update, patch);
 
                 vset_free(filter);
