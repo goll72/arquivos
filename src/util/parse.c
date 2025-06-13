@@ -31,6 +31,23 @@ static inline char *append_realloc(char *result, size_t *len, size_t *cap, char 
     return result;
 }
 
+static bool try_read_null_value(FILE *f)
+{
+    int c;
+    const char *p = "nulo";
+
+    do {
+        if (*p == '\0')
+            return true;
+        
+        c = fgetc(f);
+    } while (tolower(c) == *p++);
+
+    ungetc(c, f);
+
+    return false;
+}
+
 /**
  * Os delimitadores aceitos para campos do tipo `T_STR` são
  * especificados por `delims`. Se for `NULL`, a string deverá
@@ -64,6 +81,9 @@ static bool parse_field_by_delims(FILE *f, enum typeinfo info, void *dest, const
     bool is_null = (c == '\n' || c == '\r') || (delims && strchr(delims, c));
 
     ungetc(c, f);
+
+    if (info != T_STR && !delims && !is_null)
+        is_null = try_read_null_value(f);
 
     switch (info) {
         case T_U32: {
