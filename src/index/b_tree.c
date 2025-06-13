@@ -254,15 +254,25 @@ static bool b_tree_write_header(b_tree_index_t *tree)
     return true;
 }
 
+/**
+ * Lê uma página da árvore B cujo RRN é dado por `rrn`, a partir do arquivo de dados,
+ * armazenando-a em `page`.
+ */
 static void b_tree_read_page(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t *page)
 {
-    fseek(tree->file, HEADER_SIZE + rrn * PAGE_SIZE, SEEK_SET);
+    // Adicionamos 1 devido ao registro de cabeçalho
+    fseek(tree->file, (rrn + 1) * PAGE_SIZE, SEEK_SET);
     fread(page, PAGE_SIZE, 1, tree->file);
 }
 
+/**
+ * Escreve uma página da árvore B, cujo conteúdo está em `page`, no arquivo de dados,
+ * usando o RRN `rrn`.
+ */
 static void b_tree_write_page(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t *page)
 {
-    fseek(tree->file, HEADER_SIZE + rrn * PAGE_SIZE, SEEK_SET);
+    // Adicionamos 1 devido ao registro de cabeçalho
+    fseek(tree->file, (rrn + 1) * PAGE_SIZE, SEEK_SET);
     fwrite(page, PAGE_SIZE, 1, tree->file);
 }
 
@@ -321,9 +331,7 @@ void b_tree_close(b_tree_index_t *tree)
 
     if (tree->mode_is_modify) {
         tree->status = B_STATUS_CONSISTENT;
-
-        fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
-        fwrite(&tree->status, sizeof tree->status, 1, tree->file);
+        b_tree_write_header(tree);
     }
 
     fclose(tree->file);
@@ -383,11 +391,11 @@ static void b_tree_put_subnode(b_tree_page_t *page, uint32_t index, b_tree_subno
  * um valor com a chave `key` deveria ser inserido, se não for encontrada.
  *
  * Retorna o índice do subnó na página.
+ *
+ * O comportamento dessa função é indefinido se `*NODE_LEN_P(page) == 0`.
  */
 static uint32_t b_tree_bin_search(const b_tree_page_t *page, uint32_t key, b_tree_subnode_t *sub)
 {
-    uint32_t len = *NODE_LEN_P(page);
-
     // A busca é realizada no intervalo [low, high), comparando
     // o valor do meio `mid` com o valor sendo buscado. Desse modo,
     // a quantidade de comparações realizada é reduzida quando
@@ -402,13 +410,13 @@ static uint32_t b_tree_bin_search(const b_tree_page_t *page, uint32_t key, b_tre
     // inserção for o fim do vetor, o que é útil na implementação
     // das operações inserção e split da árvore B.
     uint32_t low = 0;
-    uint32_t high = len;
+    uint32_t high = *NODE_LEN_P(page);
 
     uint32_t mid = low + (high - low) / 2;
 
     while (low < high) {
         b_tree_get_subnode(page, mid, sub);
-        
+
         if (key > sub->key)
             low = mid + 1;
         else if (key < sub->key)
@@ -433,6 +441,11 @@ static bool b_tree_search_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     // da página com o RRN desejado a partir do disco.
     const b_tree_page_t *page = b_tree_adequate_page(tree, page_rrn, &(b_tree_page_t){});
 
+    // Esse caso só irá ocorrer no início, quando a
+    // árvore estiver vazia, porém deve ser tratado.
+    if (*NODE_LEN_P(page) == 0)
+        return false;
+
     b_tree_subnode_t sub;
     b_tree_bin_search(page, key, &sub);
 
@@ -455,17 +468,20 @@ bool b_tree_search(b_tree_index_t *tree, uint32_t key, uint64_t *offset)
  * Insere o subnó `sub` na posição `index` da página `page` da árvore B,
  * deslocando os nós à direita, se necessário, e incrementando o tamanho
  * (quantidade de nós armazenados) da página.
+ *
+ * Deve haver espaço para mais um nó na página. Caso não haja, o
+ * comportamento dessa função é indefinido.
  */ 
 static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_tree_subnode_t *sub)
 {
-    // XXX: this can overflow
     char *base = NODE_DATA_P(page) + SUBNODE_SKIP * index;
 
     char *src = base;
     char *dest = base + SUBNODE_SKIP;
-    const char *end = NODE_DATA_P(page) + SUBNODE_SKIP * *NODE_LEN_P(page);
 
-    memmove(dest, src, end - dest);
+    size_t len = SUBNODE_SKIP * (*NODE_LEN_P(page) - index);
+
+    memmove(dest, src, len);
 
     b_tree_put_subnode(page, index, sub);
 
@@ -564,7 +580,7 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
         // Devemos decrementar o índice de inserção, pois estamos
         // realizando a promoção antes de fazer a inserção
         ins_index--;
-        
+
         // Realiza duas cópias separadas, da parte "predecessora"
         // e da parte "sucessora" ao índice de inserção, deixando
         // um espaço em `ins_index` na página à direita para que
@@ -609,12 +625,15 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 {
     b_tree_page_t *page = b_tree_adequate_page(tree, page_rrn, &(b_tree_page_t){});
 
+    size_t len = *NODE_LEN_P(page);
+
     if (*NODE_TYPE_P(page) == NODE_TYPE_LEAF) {
-        b_tree_subnode_t sub;
+        b_tree_subnode_t sub = { .left = -1, .right = -1 };
+
         // Índice onde a inserção irá ocorrer, se houver espaço
-        uint32_t ins_index = b_tree_bin_search(page, key, &sub);
-        
-        if (*NODE_LEN_P(page) < N_KEYS) {
+        uint32_t ins_index = len ? b_tree_bin_search(page, key, &sub) : 0;
+
+        if (len < N_KEYS) {
             sub.left = -1;
             sub.key = key;
             sub.offset = offset;
@@ -642,6 +661,9 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         }
     }
 
+    // Esse caso nunca deveria ocorrer
+    assert(len != 0);
+
     b_tree_subnode_t sub;
     // Índice onde a inserção deveria ocorrer, se esse nó fosse um nó folha
     uint32_t ins_index = b_tree_bin_search(page, key, &sub);
@@ -662,7 +684,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         if (next_rrn == sub.right)
             ins_index = ins_index + 1;
         
-        if (*NODE_LEN_P(page) < N_KEYS) {
+        if (len < N_KEYS) {
             // Insere ordenado
             b_tree_shift_insert_subnode(page, ins_index, promoted);
 
@@ -704,10 +726,20 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
     }
 
     b_tree_subnode_t promoted;
-    b_tree_insert_impl(tree, tree->root_rrn, key, offset, &promoted);
+    bool was_promoted = b_tree_insert_impl(tree, tree->root_rrn, key, offset, &promoted);
 
     if (tree->root_dirty) {
         b_tree_write_page(tree, tree->root_rrn, &tree->root);
         tree->root_dirty = false;
+    }
+
+    if (was_promoted) {
+        tree->root_rrn = b_tree_new_page(tree);
+        b_tree_init_page(&tree->root);
+
+        *NODE_TYPE_P(&tree->root) = NODE_TYPE_ROOT;
+
+        b_tree_shift_insert_subnode(&tree->root, 0, &promoted);
+        tree->root_dirty = true;
     }
 }
