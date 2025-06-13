@@ -12,6 +12,7 @@ hexdump -L=always -e '44/1 " %02x_L[blue@0,green@1-4,yellow@5-8,cyan@9-12,gray@1
 rm "$FILE".000
 
 echo
+echo "       type        n_keys      child       key         offset                  child       key         offset                  child"
 
 i=0
 
