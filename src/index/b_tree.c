@@ -173,7 +173,7 @@ typedef struct {
 static_assert(TREE_ORDER == 3, "TREE_ORDER");
 
 /**
- * Verifica que as macros `SIZE_LEFT` e `SUBNODE_SKIP`
+ * Verifica se as macros `SIZE_LEFT` e `SUBNODE_SKIP`
  * foram definidas corretamente
  */
 static_assert(SIZE_LEFT == sizeof ((b_tree_subnode_t *)0)->left, "SIZE_LEFT");
