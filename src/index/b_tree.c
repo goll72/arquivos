@@ -299,6 +299,8 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
             return NULL;
         }
 
+        tree->status = B_STATUS_INCONSISTENT;
+
         tree->next_rrn = 0;
         tree->root_rrn = -1;
         tree->n_pages = 0;
@@ -312,13 +314,13 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
         }
 
         b_tree_read_page(tree, tree->root_rrn, &tree->root);
-    }
 
-    if (tree->mode_is_modify) {
-        tree->status = B_STATUS_INCONSISTENT;
+        if (tree->mode_is_modify) {
+            tree->status = B_STATUS_INCONSISTENT;
 
-        fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
-        fwrite(&tree->status, sizeof tree->status, 1, tree->file);
+            fseek(tree->file, offsetof(PACKED(b_header_t), status), SEEK_SET);
+            fwrite(&tree->status, sizeof tree->status, 1, tree->file);
+        }
     }
 
     return tree;
