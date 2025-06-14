@@ -66,6 +66,14 @@ bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
     if (!file_write_data_rec(f, header, rec))
         return false;
 
+    header->n_valid_recs++;
+
+    // Se o registro foi inserido no fim, devemos atualizar o próximo byte offset disponível
+    if (insert_off == header->next_byte_offset)
+        header->next_byte_offset = ftell(f);
+    else
+        header->n_removed_recs--;
+
     // Caso especial: um registro foi inserido na posição dada
     // pela cabeça, apenas a cabeça precisa ser atualizada
     if (insert_off == header->top) {
@@ -74,14 +82,6 @@ bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
         fseek(f, prev + offsetof(PACKED(f_data_rec_t), next_removed_rec), SEEK_SET);
         fwrite(&next, sizeof next, 1, f);
     }
-
-    header->n_valid_recs++;
-
-    // Se o registro foi inserido no fim, devemos atualizar o próximo byte offset disponível
-    if (insert_off == header->next_byte_offset)
-        header->next_byte_offset = ftell(f);
-    else
-        header->n_removed_recs--;
 
     return true;
 }
