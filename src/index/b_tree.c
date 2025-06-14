@@ -107,6 +107,18 @@ enum {
     NODE_TYPE_INTM =  1,
 };
 
+/**
+ * Definição da struct com dados necessários para manipular a
+ * árvore B, bem como outros metadados presentes no registro
+ * de cabeçalho.
+ *
+ * O nó raiz é guardado em memória primária e atualizado em
+ * disco somente quando necessário, permitindo que haja um
+ * acesso a disco a menos para a busca e inserção, além de
+ * simplificar o código, uma vez que não é preciso tratar
+ * o caso em que a árvore está vazia (podemos "fingir" que
+ * há sempre um nó raiz).
+ */
 struct b_tree_index {
     /** Arquivo de dados da árvore */
     FILE *file;
@@ -274,18 +286,6 @@ static void b_tree_write_page(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t 
     // Adicionamos 1 devido ao registro de cabeçalho
     fseek(tree->file, (rrn + 1) * PAGE_SIZE, SEEK_SET);
     fwrite(page, PAGE_SIZE, 1, tree->file);
-}
-
-/**
- * Escreve a página `page`, com RRN `page_rrn`, postergando a escrita da página do nó
- * raiz no disco.
- */
-static void b_tree_delay_write_for_root(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t *page)
-{
-    if (page == &tree->root)
-         tree->root_dirty = true;
-    else
-        b_tree_write_page(tree, rrn, page);
 }
 
 b_tree_index_t *b_tree_open(const char *path, const char *mode)
@@ -675,7 +675,10 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
             // Insere ordenado
             b_tree_shift_insert_subnode(page, ins_index, &sub);
 
-            b_tree_delay_write_for_root(tree, page_rrn, page);
+            if (page == &tree->root)
+                tree->root_dirty = true;
+            else
+                b_tree_write_page(tree, page_rrn, page);
 
             return false;
         } else {
@@ -689,7 +692,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
             promoted->left = page_rrn;
             promoted->right = new_rrn;
 
-            b_tree_delay_write_for_root(tree, page_rrn, page);
+            b_tree_write_page(tree, page_rrn, page);
             b_tree_write_page(tree, new_rrn, &new);
 
             return true;
@@ -732,7 +735,10 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         // Insere ordenado
         b_tree_shift_insert_subnode(page, ins_index, promoted);
 
-        b_tree_delay_write_for_root(tree, page_rrn, page);
+        if (page == &tree->root)
+            tree->root_dirty = true;
+        else
+            b_tree_write_page(tree, page_rrn, page);
 
         return false;
     } else {
@@ -752,7 +758,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         promoted->left = page_rrn;
         promoted->right = new_rrn;
 
-        b_tree_delay_write_for_root(tree, page_rrn, page);
+        b_tree_write_page(tree, page_rrn, page);
         b_tree_write_page(tree, new_rrn, &new);
 
         return true;
@@ -761,18 +767,11 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
 void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
 {
-    if (tree->root_rrn == -1) {
-        tree->root_dirty = true;
+    if (tree->root_rrn == -1)
         tree->root_rrn = b_tree_new_page(tree);
-    }
 
     b_tree_subnode_t promoted;
     bool was_promoted = b_tree_insert_impl(tree, tree->root_rrn, key, offset, &promoted);
-
-    if (tree->root_dirty) {
-        b_tree_write_page(tree, tree->root_rrn, &tree->root);
-        tree->root_dirty = false;
-    }
 
     if (was_promoted) {
         tree->root_rrn = b_tree_new_page(tree);
