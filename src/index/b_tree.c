@@ -558,9 +558,7 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
         char *const src = NODE_DATA_P(page) + len_left * SUBNODE_SKIP;
         char *const dest = NODE_DATA_P(new);
 
-        size_t len = len_right
-                         ? SIZE_LEFT + len_right * SUBNODE_SKIP
-                         : 0;
+        size_t len = SIZE_LEFT + len_right * SUBNODE_SKIP;
 
         // Copia a parte da página da esquerda que agora
         // deve ficar à direita para a página da direita
@@ -584,7 +582,11 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
     // a promoção e o deslocamento ocorrendo após a inserção.
     ins_index -= len_left;
 
-    // Origem (região de `page` a ser copiada para `new`)
+    // Origem (região de `page` a ser copiada para `new`),
+    // assumindo que o split e a promoção sejam realizados
+    // separadamente (embora esse código implemente as duas
+    // operações simultaneamente, para reduzir a quantidade
+    // de cópias, tendo que lidar com mais casos)
     char *const src = NODE_DATA_P(page) + SUBNODE_SKIP * len_left;
     // Destino (região de `new` que receberá o conteúdo copiado de `page`)
     char *const dest = NODE_DATA_P(new);
@@ -615,7 +617,10 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
         // seja possível realizar a inserção. Dessa forma, copiamos
         // cada chave apenas uma vez, em vez de duas (caso fosse
         // feita uma cópia convencional seguida de um deslocamento)
-        char *const src_prec = src;
+        //
+        // NOTE: adicionamos `SUBNODE_SKIP` para pular o subnó que
+        // foi promovido, que se encontra na posição `len_left`
+        char *const src_prec = src + SUBNODE_SKIP;
         char *const dest_prec = dest;
         
         size_t len_prec = ins_index
