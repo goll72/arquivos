@@ -63,7 +63,7 @@ i=0
 for f in "$FILE".*; do
     hexdump -L=always -e "$PAGE_SIZE/1 \" %02x_L[$hex_colors]\" \"$SEP\"" ${CHAR_FMT:+-e} ${CHAR_FMT:+"$PAGE_SIZE/1 \"%_p\" \"\n\""} "$f"
 done | while read -r line; do
-    printf '%05d %s\n' $i "$line"
+    printf '%05x %s\n' $i "$line"
     i=$((i + 1))
 done
 
