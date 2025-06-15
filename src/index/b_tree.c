@@ -672,7 +672,7 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
  * Realiza a inserção de `sub` na posição `ins_index` da página `page`, cujo RRN
  * é `page_rrn`, escrevendo o que for necessário de volta no arquivo de dados.
  *
- * Se houver split e promoção, retorna `true` e armazena o nó promovido em `promoted`.
+ * Se houver split e promoção, retorna `true` e armazena o subnó promovido em `promoted`.
  */
 static bool b_tree_perform_insert(b_tree_index_t *const tree, int32_t page_rrn, b_tree_page_t *page,
                                   uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
@@ -708,7 +708,7 @@ static bool b_tree_perform_insert(b_tree_index_t *const tree, int32_t page_rrn, 
 /**
  * Implementa a inserção de fato, de forma recursiva; vd. `b_tree_insert`.
  *
- * Se houver split e promoção, retorna `true` e armazena o nó promovido em `promoted`.
+ * Se houver split e promoção, retorna `true` e armazena o subnó promovido em `promoted`.
  */
 static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uint32_t key, uint64_t offset, b_tree_subnode_t *promoted)
 {

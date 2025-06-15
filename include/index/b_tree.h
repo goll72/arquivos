@@ -6,7 +6,7 @@
 
 /**
  * Uma árvore B, que será usada como índice para o campo
- * ID no arquivo de dados.
+ * ID no arquivo de dados. Não permite repetição de chaves.
  */
 
 typedef struct b_tree_index b_tree_index_t;
