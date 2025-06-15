@@ -129,16 +129,16 @@ enum {
 struct b_tree_index {
     /** Arquivo de dados da árvore */
     FILE *file;
-    
-    /** RRN da próxima página disponível no arquivo de dados da árvore */
-    uint32_t next_rrn;
-    
+
     /** RRN da página que contém o nó raiz da árvore */
     uint32_t root_rrn;
 
+    /** RRN da próxima página disponível no arquivo de dados da árvore */
+    uint32_t next_rrn;
+
     /** Quantidade de páginas usadas pela árvore */ 
     uint32_t n_pages;
-    
+
     /**
      * Indica se a página do nó raiz contida em `root` está
      * "suja", ou seja, foi modificada e deve ser reescrita
@@ -226,7 +226,7 @@ static void b_tree_init_page(b_tree_page_t *page)
     // Inicializa o campo `left`
     memset(p, -1, SIZE_LEFT);
     p += SIZE_LEFT;
-    
+
     // Inicializa os demais campos (o valor padrão para todos é -1)
     while (p + SUBNODE_SKIP <= end) {
         memset(p, -1, SUBNODE_SKIP);
@@ -320,8 +320,8 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
 
         tree->status = B_STATUS_INCONSISTENT;
 
-        tree->next_rrn = 0;
         tree->root_rrn = -1;
+        tree->next_rrn = 0;
         tree->n_pages = 0;
 
         b_tree_write_header(tree);
@@ -381,7 +381,7 @@ static inline b_tree_page_t *b_tree_adequate_page(b_tree_index_t *const tree,
 static void b_tree_get_subnode(const b_tree_page_t *page, uint32_t index, b_tree_subnode_t *sub)
 {
     const char *base = NODE_DATA_P(page) + SUBNODE_SKIP * index;
- 
+
     #define X(T, name) \
         memcpy(&sub->name, base + offsetof(PACKED(b_tree_subnode_t), name), sizeof sub->name);
 
@@ -462,7 +462,7 @@ static bool b_tree_search_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 {
     if (page_rrn == -1)
         return false;
-    
+
     // Usa `tree->root` como página se `page_rrn == tree->root_rrn`, caso contrário
     // usa uma página anônima alocada na stack ("compound literal") e lê o conteúdo
     // da página com o RRN desejado a partir do disco.
@@ -637,7 +637,7 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
         // foi promovido, que se encontra na posição `len_left`
         char *const src_prec = src + SUBNODE_SKIP;
         char *const dest_prec = dest;
-        
+
         size_t len_prec = ins_index
                               ? SIZE_LEFT + ins_index * SUBNODE_SKIP
                               : 0;
@@ -664,14 +664,51 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
     // NOTE: adicionamos `SIZE_LEFT` para que o filho direito do
     // último subnó que permaneceu em `page` não seja apagado
     memset(src + SIZE_LEFT, -1, len - SIZE_LEFT);
-    
+
     return new_rrn;
+}
+
+/**
+ * Realiza a inserção de `sub` na posição `ins_index` da página `page`, cujo RRN
+ * é `page_rrn`, escrevendo o que for necessário de volta no arquivo de dados.
+ *
+ * Se houver split e promoção, retorna `true` e armazena o nó promovido em `promoted`.
+ */
+static bool b_tree_perform_insert(b_tree_index_t *const tree, int32_t page_rrn, b_tree_page_t *page,
+                                  uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
+{
+    size_t len = *NODE_LEN_P(page);
+
+    if (len < N_KEYS) {
+        // Insere ordenado
+        b_tree_shift_insert_subnode(page, ins_index, sub);
+
+        if (page == &tree->root)
+            tree->root_dirty = true;
+        else
+            b_tree_write_page(tree, page_rrn, page);
+
+        return false;
+    } else {
+        b_tree_page_t new;
+
+        // Split
+        int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, sub, promoted);
+
+        promoted->left = page_rrn;
+        promoted->right = new_rrn;
+
+        b_tree_write_page(tree, page_rrn, page);
+        b_tree_write_page(tree, new_rrn, &new);
+
+        return true;
+    }
 }
 
 /**
  * Implementa a inserção de fato, de forma recursiva; vd. `b_tree_insert`.
  *
- * Retorna `false` se não houve promoção para o nível anterior.
+ * Se houver split e promoção, retorna `true` e armazena o nó promovido em `promoted`.
  */
 static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uint32_t key, uint64_t offset, b_tree_subnode_t *promoted)
 {
@@ -688,32 +725,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         sub.key = key;
         sub.offset = offset;
 
-        if (len < N_KEYS) {
-            // Insere ordenado
-            b_tree_shift_insert_subnode(page, ins_index, &sub);
-
-            if (page == &tree->root)
-                tree->root_dirty = true;
-            else
-                b_tree_write_page(tree, page_rrn, page);
-
-            return false;
-        } else {
-            // << Queremos preservar os valores de sub.left e sub.right
-
-            b_tree_page_t new;
-
-            // Split
-            int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, &sub, promoted);
-
-            promoted->left = page_rrn;
-            promoted->right = new_rrn;
-
-            b_tree_write_page(tree, page_rrn, page);
-            b_tree_write_page(tree, new_rrn, &new);
-
-            return true;
-        }
+        return b_tree_perform_insert(tree, page_rrn, page, ins_index, &sub, promoted);
     }
 
     // Esse caso nunca deveria ocorrer
@@ -748,39 +760,16 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     if (!was_promoted)
         return false;
 
-    // XXX: dedupe?
-    if (len < N_KEYS) {
-        // Insere ordenado
-        b_tree_shift_insert_subnode(page, ins_index, promoted);
+    // Devemos fazer mais uma inserção, devido à promoção na volta da recursão.
+    //
+    // Como já não precisamos de `sub` (uma vez que a inserção no nó folha já foi
+    // feita --- estamos na volta da recursão), copiamos `promoted`, o nó que foi
+    // promovido de um nível inferior, para `sub` antes de chamar
+    // `b_tree_perform_insert` (que já irá inserir `sub` na posição desejada e
+    // armazenar o nó promovido resultante dessa inserção em `promoted`, se houver)
+    memcpy(&sub, promoted, sizeof sub);
 
-        if (page == &tree->root)
-            tree->root_dirty = true;
-        else
-            b_tree_write_page(tree, page_rrn, page);
-
-        return false;
-    } else {
-        b_tree_page_t new;
-
-        // Iremos realizar outra promoção, porém ainda temos que fazer o split
-        //
-        // Como já não precisamos de `sub` (originalmente usado para a inserção, no entanto
-        // a inserção já foi feita --- estamos na volta da recursão), copiamos o nó promovido
-        // de um nível inferior para `sub` e realizamos o "split" (que já irá inserir `sub`
-        // na posição desejada)
-        memcpy(&sub, promoted, sizeof sub);
-
-        // Split
-        int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, &sub, promoted);
-
-        promoted->left = page_rrn;
-        promoted->right = new_rrn;
-
-        b_tree_write_page(tree, page_rrn, page);
-        b_tree_write_page(tree, new_rrn, &new);
-
-        return true;
-    }
+    return b_tree_perform_insert(tree, page_rrn, page, ins_index, &sub, promoted);
 }
 
 void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
@@ -791,6 +780,10 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
     b_tree_subnode_t promoted;
     bool was_promoted = b_tree_insert_impl(tree, tree->root_rrn, key, offset, &promoted);
 
+    // Lida com o caso em que houve split e promoção no nó raiz.
+    // 
+    // Nesse caso, o novo nó raiz é inicialmente vazio, logo,
+    // inserimos ordenado (trivialmente)
     if (was_promoted) {
         tree->root_rrn = b_tree_new_page(tree);
         b_tree_init_page(&tree->root);
