@@ -206,15 +206,10 @@ bool file_read_data_rec(FILE *f, const f_header_t *header, f_data_rec_t *rec)
     #undef X
     #undef Y
 
-    // Verifica que o final do registro possui lixo válido
-    while (rem_size > 0) {
-        if (fgetc(f) != '$')
-            return false;
+    // Pula o lixo presente no final do registro
+    fseek(f, rem_size, SEEK_CUR);
 
-        rem_size--;
-    }
-
-    return rem_size == 0;
+    return true;
 }
 
 /* clang-format on */
