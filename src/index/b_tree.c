@@ -81,7 +81,14 @@ typedef struct {
 /** Verdadeiro se houver espaço no final da página da árvore, que deverá ser preenchido com '$' */
 #define TREE_PAGE_NEEDS_PADDING N_KEYS * SUBNODE_SKIP + SIZE_LEFT < PAGE_SIZE - PAGE_META_SIZE
 
-/** Guarda uma página (nó) da árvore B */
+/**
+ * Guarda uma página (nó) da árvore B. O conteúdo da página é simplesmente
+ * representado como um `char[]`, para que seja possível usar a mesma
+ * representação para a página da árvore B em memória primária e em disco
+ * (graças ao `alignas(uint32_t)`, valores inteiros podem ser lidos/escritos
+ * diretamente na página, desde que sigam o alinhamento, validando as macros
+ * a seguir).
+ */
 typedef struct {
     alignas(uint32_t) char data[PAGE_SIZE];
 } b_tree_page_t;
@@ -471,15 +478,23 @@ static bool b_tree_search_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     b_tree_subnode_t sub;
     uint32_t index = b_tree_bin_search(page, key, &sub);
 
-    // Se a posição determinada pela busca binária for o fim, a chave não foi encontrada
+    // Se a posição determinada pela busca binária for o fim, devemos seguir pelo
+    // filho direito do último subnó, em vez do filho esquerdo de um subnó não
+    // existente na posição `len` --- que é o subnó retornado pela função
+    // `b_tree_bin_search`.
+    //
+    // NOTE: a função `b_tree_bin_search` foi definida considerando que a posição
+    // de inserção é a posição do primeiro subnó que será deslocado à direita, o
+    // que corresponde a dizer que é a posição do primeiro subnó cuja chave é maior
+    // que a chave em `key`. Ou seja, dado que a busca binária retornou um nó válido,
+    // sempre prosseguimos pelo filho esquerdo desse nó.   vd. `b_tree_insert_impl`.
     if (index == len)
-        return false;
-
-    if (key > sub.key)
-        return b_tree_search_impl(tree, sub.right, key, offset);
+        b_tree_get_subnode(page, len - 1, &sub);
 
     if (key < sub.key)
         return b_tree_search_impl(tree, sub.left, key, offset);
+    else if (key > sub.key)
+        return b_tree_search_impl(tree, sub.right, key, offset);
 
     *offset = sub.offset;
     return true;
@@ -647,7 +662,7 @@ int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page
     // Apaga a parte da página `page` que foi copiada para `new`
     // 
     // NOTE: adicionamos `SIZE_LEFT` para que o filho direito do
-    // último subnó não seja apagado
+    // último subnó que permaneceu em `page` não seja apagado
     memset(src + SIZE_LEFT, -1, len - SIZE_LEFT);
     
     return new_rrn;
@@ -674,9 +689,6 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
         sub.offset = offset;
 
         if (len < N_KEYS) {
-            sub.left = -1;
-            // << Queremos preservar o valor de sub.right
-
             // Insere ordenado
             b_tree_shift_insert_subnode(page, ins_index, &sub);
 
@@ -724,10 +736,10 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
     int32_t next_rrn;
 
-    if (key > sub.key)
-        next_rrn = sub.right;
-    else if (key < sub.key)
+    if (key < sub.key)
         next_rrn = sub.left;
+    else if (key > sub.key)
+        next_rrn = sub.right;
     else
         return false;
 
@@ -736,6 +748,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     if (!was_promoted)
         return false;
 
+    // XXX: dedupe?
     if (len < N_KEYS) {
         // Insere ordenado
         b_tree_shift_insert_subnode(page, ins_index, promoted);

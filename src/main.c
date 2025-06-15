@@ -442,7 +442,7 @@ int main(void)
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
                 // Insere o registro `rec` no arquivo, seguindo
-                // as regras do algoritmo de reuso de espaço
+                // as regras do algoritmo de reúso de espaço
                 if (!crud_insert(f, &header, &rec))
                     bail(E_PROCESSINGFILE);
 

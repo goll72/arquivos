@@ -31,6 +31,13 @@ static inline char *append_realloc(char *result, size_t *len, size_t *cap, char 
     return result;
 }
 
+/*
+ * Tenta ler um valor "nulo" a partir do arquivo `f`. Usado
+ * para interpretar valores nulos ao fazer leitura sem usar
+ * delimitadores (campos delimitados por espaço).
+ *
+ * Retorna `true` se um valor "nulo" for lido da posição atual.
+ */
 static bool try_read_null_value(FILE *f)
 {
     int c;
@@ -198,8 +205,8 @@ static bool parse_field_by_delims(FILE *f, enum typeinfo info, void *dest, const
 
 /**
  * Lê o campo atual do arquivo CSV `f`. Assume que o arquivo é
- * "seekable", ou seja, `fseek` pode ser usado, ao contrário de
- * outras funções.
+ * "seekable", ou seja, `fseek` pode ser usado, ao contrário das
+ * outras funções nesse arquivo.
  */
 static bool csv_read_field(FILE *f, enum typeinfo info, void *dest)
 {
