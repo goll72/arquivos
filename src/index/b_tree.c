@@ -25,6 +25,7 @@
 #define B_STATUS_INCONSISTENT '0'
 #define B_STATUS_CONSISTENT   '1'
 
+// SYNC: b_subnode
 #define SUBNODE_FIELDS(X)  \
     X(uint32_t, left)      \
     X(uint32_t, key)       \
@@ -75,6 +76,12 @@ typedef struct {
 /** Quantidade de chaves que podem ser armazenadas em um nó/uma página da árvore */
 #define N_KEYS ((PAGE_SIZE - PAGE_META_SIZE - SIZE_LEFT) / SUBNODE_SKIP)
 
+/** Taxa de ocupação mínima de um nó intermediário (não-raiz e não-folha) */
+#define MIN_OCCUPANCY_INTM (N_KEYS / 2)
+
+/** Taxa de ocupação mínima de um nó folha */
+#define MIN_OCCUPANCY_LEAF (N_KEYS / 2 + N_KEYS % 2)
+
 /** Ordem da árvore */
 #define TREE_ORDER (N_KEYS + 1)
 
@@ -102,7 +109,7 @@ typedef struct {
 /** Ponteiro para os dados do nó */
 #define NODE_DATA_P(p) &(p)->data[8]
 
-enum {
+enum b_node_type {
     /**
      * Possui precedência sobre `NODE_TYPE_ROOT`, ou seja,
      * o tipo de um nó que é simultaneamente raiz e folha
@@ -112,6 +119,15 @@ enum {
     NODE_TYPE_ROOT =  0,
     /** Intermediário */
     NODE_TYPE_INTM =  1,
+};
+
+typedef struct b_hook b_hook_t;
+
+struct b_hook {
+    enum b_hook_type type;
+    b_hook_cb_t *cb;
+    void *data;
+    b_hook_t *next;
 };
 
 /**
@@ -129,6 +145,8 @@ enum {
 struct b_tree_index {
     /** Arquivo de dados da árvore */
     FILE *file;
+
+    b_hook_t *hooks;
 
     /** RRN da página que contém o nó raiz da árvore */
     uint32_t root_rrn;
@@ -185,6 +203,14 @@ typedef struct {
 typedef struct {
     SUBNODE_FIELDS(X)
 } __attribute__((packed)) PACKED(b_tree_subnode_t);
+
+/**
+ * Inicializador padrão para um subnó.
+ *
+ * WARN: não use os campos `key`/`offset` de um subnó inicializado
+ * por meio dessa macro sem antes inicializá-los separadamente.
+ */
+#define SUBNODE_INIT { .left = -1, .right = -1 }
 
 #undef X
 
@@ -295,6 +321,18 @@ static void b_tree_write_page(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t 
     fwrite(page, PAGE_SIZE, 1, tree->file);
 }
 
+/**
+ * Escreve a página da árvore B contida em `page` no arquivo de dados, exceto se a
+ * página corresponder à raiz da árvore: nesse caso, a página é marcada como
+ * "inválida", para que possa ser escrita posteriormente.
+ */
+static void b_tree_write_page_or_mark_dirty(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t *page) {
+    if (page == &tree->root)
+        tree->root_dirty = true;
+    else
+        b_tree_write_page(tree, rrn, page);
+}
+
 b_tree_index_t *b_tree_open(const char *path, const char *mode)
 {
     FILE *file = fopen(path, mode);
@@ -305,6 +343,7 @@ b_tree_index_t *b_tree_open(const char *path, const char *mode)
     b_tree_index_t *tree = malloc(sizeof *tree);
 
     tree->file = file;
+    tree->hooks = NULL;
     tree->root_dirty = false;
     tree->mode_is_modify = strchr(mode, 'w') || strchr(mode, '+');
 
@@ -353,6 +392,20 @@ void b_tree_close(b_tree_index_t *tree)
     if (tree->mode_is_modify) {
         tree->status = B_STATUS_CONSISTENT;
         b_tree_write_header(tree);
+    }
+
+    for (b_hook_t *curr = tree->hooks; curr; curr = curr->next) {
+        if (curr->type == B_HOOK_CLOSE)
+            curr->cb(tree->file, curr->data);
+    }
+
+    b_hook_t *next = NULL;
+    b_hook_t *prev = tree->hooks;
+
+    while (prev || next) {
+        next = prev->next;
+        free(prev);
+        prev = next;
     }
 
     fclose(tree->file);
@@ -418,18 +471,14 @@ static void b_tree_put_subnode(b_tree_page_t *page, uint32_t index, b_tree_subno
 static uint32_t b_tree_bin_search(const b_tree_page_t *page, uint32_t key, b_tree_subnode_t *sub)
 {
     // A busca é realizada no intervalo [low, high), comparando
-    // o valor do meio `mid` com o valor sendo buscado. Desse modo,
-    // a quantidade de comparações realizada é reduzida quando
-    // comparado a uma implementação que realiza duas comparações
-    // (obviamente, a complexidade de tempo é a mesma).
-    //
-    // Além disso, a busca em um intervalo semi-aberto permite que
-    // a busca retorne a posição onde o valor deveria ser inserido
-    // (onde subentende-se que inserir corresponde a guardar o valor
-    // naquela posição e deslocar as demais para a direita), sendo
-    // que essa implementação funciona até mesmo se o local de
-    // inserção for o fim do vetor, o que é útil na implementação
-    // das operações inserção e split da árvore B.
+    // o valor do meio `mid` com o valor sendo buscado. Usar um
+    // intervalo semi-aberto permite que a busca retorne a posição
+    // onde o valor deveria ser inserido (onde subentende-se que
+    // inserir corresponde a guardar o valor naquela posição e
+    // deslocar as demais para a direita), sendo que essa
+    // implementação funciona até mesmo se o local de inserção for
+    // o fim do vetor, o que é útil na implementação das operações
+    // inserção e split da árvore B.
     uint32_t low = 0;
     uint32_t high = *NODE_LEN_P(page);
 
@@ -486,7 +535,7 @@ static bool b_tree_search_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     // NOTE: a função `b_tree_bin_search` foi definida considerando que a posição
     // de inserção é a posição do primeiro subnó que será deslocado à direita, o
     // que corresponde a dizer que é a posição do primeiro subnó cuja chave é maior
-    // que a chave em `key`. Ou seja, dado que a busca binária retornou um nó válido,
+    // que ou igual a `key`. Ou seja, dado que a busca binária retornou um nó válido,
     // sempre prosseguimos pelo filho esquerdo desse nó.   vd. `b_tree_insert_impl`.
     if (index == len)
         b_tree_get_subnode(page, len - 1, &sub);
@@ -539,7 +588,7 @@ static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_t
  *
  * Retorna o RRN da nova página.
  */
-int32_t b_tree_split_page(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new,
+int32_t b_tree_split(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new,
                           uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
 {
     int32_t new_rrn = b_tree_new_page(tree);
@@ -683,17 +732,14 @@ static bool b_tree_perform_insert(b_tree_index_t *const tree, int32_t page_rrn, 
         // Insere ordenado
         b_tree_shift_insert_subnode(page, ins_index, sub);
 
-        if (page == &tree->root)
-            tree->root_dirty = true;
-        else
-            b_tree_write_page(tree, page_rrn, page);
+        b_tree_write_page_or_mark_dirty(tree, page_rrn, page);
 
         return false;
     } else {
         b_tree_page_t new;
 
         // Split
-        int32_t new_rrn = b_tree_split_page(tree, page, &new, ins_index, sub, promoted);
+        int32_t new_rrn = b_tree_split(tree, page, &new, ins_index, sub, promoted);
 
         promoted->left = page_rrn;
         promoted->right = new_rrn;
@@ -717,7 +763,7 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
     size_t len = *NODE_LEN_P(page);
 
     if (*NODE_TYPE_P(page) == NODE_TYPE_LEAF) {
-        b_tree_subnode_t sub = { .left = -1, .right = -1 };
+        b_tree_subnode_t sub = SUBNODE_INIT;
 
         // Índice onde a inserção irá ocorrer, se houver espaço
         uint32_t ins_index = len ? b_tree_bin_search(page, key, &sub) : 0;
@@ -783,7 +829,7 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
     // Lida com o caso em que houve split e promoção no nó raiz.
     // 
     // Nesse caso, o novo nó raiz é inicialmente vazio, logo,
-    // inserimos ordenado (trivialmente)
+    // inserimos ordenadamente (de forma trivial)
     if (was_promoted) {
         tree->root_rrn = b_tree_new_page(tree);
         b_tree_init_page(&tree->root);
@@ -793,4 +839,307 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
         b_tree_shift_insert_subnode(&tree->root, 0, &promoted);
         tree->root_dirty = true;
     }
+}
+
+/**
+ * Remove o subnó com índice `index` do nó contido na página `page`, deslocando os demais
+ * subnós para a esquerda e atualizando o tamanho.
+ */
+static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
+{
+    char *base = NODE_DATA_P(page) + SUBNODE_SKIP * index;
+
+    char *src = base;
+    char *dest = base - SUBNODE_SKIP;
+
+    size_t len = SIZE_LEFT + SUBNODE_SKIP * (*NODE_LEN_P(page) - index);
+
+    memmove(dest, src, len);
+
+    *NODE_LEN_P(page) -= 1;
+}
+
+/**
+ * Tenta realizar uma redistribuição de chaves entre as páginas `left` e `right`.
+ *
+ * Retorna `true` se for possível realizar a redistribuição e a realiza, removendo
+ * a chave com índice `del_index`, escrevendo as alterações realizadas de volta no
+ * arquivo de dados. Retorna `false` se não for possível redistribuir, não alterando,
+ * nesse caso, o conteúdo das páginas.
+ */
+static bool b_tree_try_redistribute(b_tree_index_t *const tree,
+                                    int32_t left_rrn, b_tree_page_t *left,
+                                    int32_t right_rrn, b_tree_page_t *right,
+                                    uint32_t del_index)
+{
+    size_t len_left = *NODE_LEN_P(left);
+    size_t len_right = *NODE_LEN_P(right);
+
+    assert(len_left + len_right <= 2 * N_KEYS);
+
+    enum b_node_type type = *NODE_TYPE_P(left);
+
+    size_t min_occup = type == NODE_TYPE_INTM
+                                    ? MIN_OCCUPANCY_INTM
+                                    : MIN_OCCUPANCY_LEAF;
+
+    // Não será possível fazer a redistribuição
+    if (len_left + len_right < 2 * min_occup)
+        return false;
+
+    if (del_index < len_left) {
+
+    } else {
+        
+    }
+
+    b_tree_write_page(tree, left_rrn, left);
+    b_tree_write_page(tree, right_rrn, right);
+    
+    return true;
+}
+
+/**
+ * Concatena a página `right` a `left`, destruindo a página `right`,
+ * rebaixando (inserindo) o subnó `demoted` e removendo o subnó no
+ * índice `del_index`.
+ */
+static void b_tree_concat(b_tree_index_t *const tree,
+                          int32_t left_rrn, b_tree_page_t *left,
+                          int32_t right_rrn, b_tree_page_t *right,
+                          uint32_t del_index, b_tree_subnode_t *demoted)
+{
+    size_t len_left = *NODE_LEN_P(left);
+    size_t len_right = *NODE_LEN_P(right);
+
+    // (+ 1 - 1) devido ao subnó "rebaixado" e ao subnó removido 
+    assert(len_left + len_right <= N_KEYS);
+
+    if (del_index < len_left) {
+        
+    } else {
+        
+    }
+    
+    b_tree_write_page(tree, left_rrn, left);
+
+    // XXX: we may need to preserve the type field
+    // NOTE: it doesn't matter now
+    b_tree_init_page(right);
+    b_tree_write_page(tree, right_rrn, right);
+
+    tree->n_pages--;
+}
+
+/**
+ * Realiza a remoção do subnó com índice `del_index` no nó contido na página `page`, cujo RRN
+ * deve ser `page_rrn`. `demoted` deve guardar o possível subnó rebaixado, cf. `b_tree_remove_impl`.
+ * As alterações realizadas são escritas no arquivo de dados, conforme necessário.
+ *
+ * Retorna `true` se houver concatenação e, portanto, rebaixamento.
+ */
+static bool b_tree_perform_remove(b_tree_index_t *const tree, int32_t page_rrn, b_tree_page_t *page,
+                           uint32_t del_index, b_tree_subnode_t *demoted)
+{
+    size_t len = *NODE_LEN_P(page);
+    enum b_node_type type = *NODE_TYPE_P(page);
+
+    bool can_remove_directly = page == &tree->root
+                                   || (type == NODE_TYPE_INTM && len > MIN_OCCUPANCY_INTM)
+                                   || (type == NODE_TYPE_LEAF && len > MIN_OCCUPANCY_LEAF);
+
+    if (can_remove_directly) {
+        b_tree_shift_remove_subnode(page, del_index);
+        b_tree_write_page_or_mark_dirty(tree, page_rrn, page);
+        
+        return false;
+    }
+
+    if (demoted->right != -1) {
+        b_tree_page_t right;
+        int32_t right_rrn = demoted->right;
+        
+        b_tree_read_page(tree, right_rrn, &right);
+
+        if (b_tree_try_redistribute(tree, page_rrn, page, right_rrn, &right, del_index))
+            return false;
+
+        b_tree_concat(tree, page_rrn, page, right_rrn, &right, del_index, demoted);
+    } else if (demoted->left != -1) {
+        b_tree_page_t left;
+        int32_t left_rrn = demoted->left;
+
+        del_index += *NODE_LEN_P(&left);
+        
+        b_tree_read_page(tree, left_rrn, &left);
+        b_tree_concat(tree, left_rrn, &left, page_rrn, page, del_index, demoted);
+    } 
+
+    return true;
+}
+
+/**
+ * Realiza a remoção de uma chave da árvore B recursivamente.
+ *
+ * `page_rrn` corresponde ao RRN da página contendo o nó atual na recursão, `key`
+ * corresponde à chave a ser removida, enquanto `demoted` deve guardar o subnó pelo
+ * qual a recursão prosseguiu na etapa anterior, com um "twist": o valor do campo
+ * que guarda o filho igual a `page_rrn` deve ser trocado pelo RRN da página irmã
+ * do lado correspondente (que não seria contemplada se esse ajuste não fosse feito).
+ *
+ * Desse modo, é possível simplificar a implementação do algoritmo de redistribuição,
+ * pois as duas páginas com quem devemos tentar redistribuir/concatenar são as páginas
+ * referenciadas no subnó `demoted`.
+ *
+ * `swap` irá "trabalhar em dose dupla": na ida da recursão, guarda o subnó a ser
+ * removido, a partir do momento em que esse subnó é encontrado em um nó não-folha,
+ * para permitir que esse subnó seja trocado com seu sucessor imediato na árvore.
+ * Na volta, passa a guardar o subnó com quem o subnó a ser removido foi trocado,
+ * para que esse subnó possa ser inserido na árvore, na posição adequada. Deve ser
+ * inicializado de modo que `swap->left` admita um valor inválido (ex. `-1`) antes
+ * de chamar a primeira instância recursiva dessa função.
+ *
+ * Retorna `true` se houve "rebaixamento"/"despromoção" a partir do nível que
+ * chamou o nível atual, para o nível (instância) atual da recursão; ou seja,
+ * houve concatenação no nível atual da recursão e, portanto, inserção do subnó
+ * contido em `demoted`, implicando que deve haver a remoção de `demoted` no nível
+ * que chamou a instância atual.
+ */
+static bool b_tree_remove_impl(b_tree_index_t *const tree, int32_t page_rrn, uint32_t key,
+                               b_tree_subnode_t *swap, b_tree_subnode_t demoted)
+{
+    b_tree_page_t *page = b_tree_adequate_page(tree, page_rrn, &(b_tree_page_t){});
+
+    size_t len = *NODE_LEN_P(page);
+
+    // Esse caso só irá acontecer se a árvore estiver vazia, no entanto,
+    // deve ser tratado
+    if (len == 0)
+        return false;
+
+    b_tree_subnode_t sub;
+    // Índice que seria removido, se o nó atual contivesse o subnó a ser removido
+    // 
+    // NOTE: da forma que foi implementada a busca binária, não é necessário
+    // adicionar lógica para buscar pelo sucessor imediato na árvore, pois o
+    // índice retornado pela busca binária (o índice onde um subnó com chave
+    // `key` deveria ser inserido) nos guiará até o sucessor automaticamente
+    uint32_t del_index = b_tree_bin_search(page, key, &sub);
+
+    if (*NODE_TYPE_P(page) == NODE_TYPE_LEAF) {
+        // A chave buscada não foi encontrada na árvore
+        if (del_index == len)
+            return false;
+
+        // Se haverá troca na volta da recursão (o subnó sendo removido
+        // não é o que queríamos remover), guarda o subnó a ser trocado
+        // em `swap` (apenas os campos `key` e `offset`, pois queremos
+        // preservar os filhos originais)
+        if (key != sub.key) {
+            // A chave buscada não foi encontrada no nó folha, e sabemos
+            // que não estamos no caso em que a chave deveria ser trocada
+            // com sua sucessora imediata na árvore, pois `swap->left`
+            // contém o valor inválido com o qual foi inicializado, em vez
+            // de um RRN válido.
+            if (swap->left == -1)
+                return false;
+
+            // SYNC: b_subnode
+            swap->key = sub.key;
+            swap->offset = sub.offset;
+        }
+
+        /* ... */
+        
+        return b_tree_perform_remove(tree, page_rrn, page, del_index, &demoted);
+    }
+
+    int32_t next_rrn;
+
+    if (del_index == len)
+        b_tree_get_subnode(page, len - 1, &sub);
+
+    // O subnó que queremos remover foi encontrado em um nó não-folha,
+    // guardamos-o em `swap`
+    if (key == sub.key)
+        memcpy(swap, &sub, sizeof sub);
+
+    b_tree_subnode_t neigh = SUBNODE_INIT;
+
+    // Em ambos os casos do `else` (chave de busca foi encontrada no nó atual ou
+    // chave de busca é maior que o nó atual), devemos seguir pela direita. No
+    // primeiro caso, isso nos permitirá chegar ao sucessor do subnó contendo
+    // essa chave na árvore.
+    //
+    // Inicializamos `sub.left`/`sub.right` com o RRN da página irmã adequada.
+    //
+    // NOTE: a partir desse ponto, nessa instância da recursão, `sub` é usado
+    // apenas para construir o subnó possivelmente rebaixado que será passado
+    // como o parâmetro `demoted` na próxima chamada recursiva, logo, não
+    // precisamos restaurar o seu valor anterior após a chamada recursiva (XXX: ?)
+    if (key < sub.key) {
+        next_rrn = sub.left;
+
+        if (del_index - 1 >= 0)
+            b_tree_get_subnode(page, del_index - 1, &neigh);
+        
+        sub.left = neigh.left;
+    } else {
+        next_rrn = sub.right;
+
+        if (del_index + 1 < len)
+            b_tree_get_subnode(page, del_index + 1, &neigh);
+
+        sub.right = neigh.right;
+    }
+
+    bool was_demoted = b_tree_remove_impl(tree, next_rrn, key, swap, sub);
+
+    // Estamos na volta da recursão, em um nó não-folha onde a chave
+    // a ser removida foi encontrada, devemos realizar a troca antes
+    // de retornar na recursão ou prosseguir com a possível remoção
+    // decorrente de um rebaixamento
+    if (key == sub.key) {
+        b_tree_put_subnode(page, del_index, swap);
+
+        // Devemos fazer essa verificação aqui novamente para evitar a escrita de
+        // uma mesma página da árvore B no disco várias vezes, desnecessariamente:
+        //
+        // Se `was_demoted == true`, haverá remoção nesse nível, logo, a função
+        // `b_tree_perform_remove` tratará de escrever a página no disco após a
+        // remoção.
+        if (!was_demoted)
+            b_tree_write_page_or_mark_dirty(tree, page_rrn, page);
+    }
+    
+    if (!was_demoted)
+        return false;
+
+    // XXX: se `sub` for usado aqui em algum momento, arrumar `sub.left`/`sub.right`
+    // (desfazer a troca com `neigh`)
+
+    /* ... */
+
+    return b_tree_perform_remove(tree, page_rrn, page, del_index, &demoted);
+}
+
+bool b_tree_remove(b_tree_index_t *tree, uint32_t key)
+{
+    b_tree_subnode_t swap;
+    b_tree_subnode_t demoted = SUBNODE_INIT;
+
+    // XXX: return com semântica diferente
+    return b_tree_remove_impl(tree, tree->root_rrn, key, &swap, demoted);
+}
+
+void b_tree_add_hook(b_tree_index_t *tree, b_hook_cb_t *cb, enum b_hook_type type, void *data)
+{
+    b_hook_t *hook = malloc(sizeof *hook);
+
+    hook->cb = cb;
+    hook->type = type;
+    hook->data = data;
+    hook->next = tree->hooks;
+    
+    tree->hooks = hook;
 }

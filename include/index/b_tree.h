@@ -1,6 +1,7 @@
 #ifndef B_TREE_INDEX
 #define B_TREE_INDEX
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -20,10 +21,16 @@ typedef struct b_tree_index b_tree_index_t;
  *
  * Se não houver cabeçalho e o modo de abertura permitir modificação,
  * assume que o arquivo está vazio e cria um registro de cabeçalho.
+ *
+ * Retorna `NULL` se ocorrer algum erro.
  */
 b_tree_index_t *b_tree_open(const char *path, const char *mode);
 
-/** Fecha o arquivo de dados da árvore B. */
+/**
+ * Fecha o arquivo de dados da árvore B e desaloca outros
+ * dados alocados internamente, chamando, antes, os hooks
+ * de tipo `B_HOOK_CLOSE`.
+ */
 void b_tree_close(b_tree_index_t *tree);
 
 /**
@@ -40,5 +47,24 @@ bool b_tree_search(b_tree_index_t *tree, uint32_t key, uint64_t *offset);
  * `offset` na árvore B.
  */
 void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset);
+
+/**
+ * Remove o registro cuja chave é `key` da árvore B.
+ * Retorna `true` se o elemento existia na árvore e foi removido.
+ */
+bool b_tree_remove(b_tree_index_t *tree, uint32_t key);
+
+typedef void b_hook_cb_t(FILE *, void *);
+
+/**
+ * Define tipos de hook para a árvore B (o único relevante para esse
+ * projeto é `B_HOOK_CLOSE`)
+ */
+enum b_hook_type {
+    B_HOOK_CLOSE
+};
+
+/** Adiciona um hook à árvore B. */
+void b_tree_add_hook(b_tree_index_t *tree, b_hook_cb_t *cb, enum b_hook_type type, void *data);
 
 #endif /* B_TREE_INDEX */
