@@ -14,6 +14,8 @@
 #include "util/hash.h"
 #include "util/parse.h"
 
+#include "index/b_tree.h"
+
 
 /**
  * Trechos de código marcados com `SYNC: tag` são trechos que devem ser
@@ -146,6 +148,19 @@ static FILE *file_open_from_stdin(f_header_t *header, const char *mode)
     return f;
 }
 
+static b_tree_index_t *b_tree_open_from_stdin(char *mode)
+{
+    char path[PATH_MAX];
+    scanf_expect(1, "%s", path);
+    
+    b_tree_index_t *index = b_tree_open(path, mode);
+
+    if (!index)
+        bail(E_PROCESSINGFILE);
+
+    return index;
+}
+
 /**
  * Realiza a atualização do header e outras operações que devem ser feitas
  * ao final do execução (apenas quando o arquivo tiver sido modificado),
@@ -165,6 +180,15 @@ static void file_cleanup_after_modify(FILE *f, f_header_t *header)
     printf("%lf\n", hash_file(f));
 
     fclose(f);
+}
+
+/**
+ * Hook usado para imprimir o hash do arquivo de dados da árvore B.
+ */
+static void hash_file_b_hook(FILE *f, void *data)
+{
+    (void)data;
+    printf("%lf\n", hash_file(f));
 }
 
 /**
@@ -239,19 +263,36 @@ static vset_t *vset_new_from_stdin(void)
 }
 
 /** Wrapper para a função `crud_delete` que aborta a execução em caso de erro */
-void delete(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+static void delete(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 {
     if (!crud_delete(f, header, rec))
         bail(E_PROCESSINGFILE);
 }
 
 /** Wrapper para a função `crud_update` que aborta a execução em caso de erro */
-void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+static void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 {
     vset_t *patch = data;
 
     if (!crud_update(f, header, rec, patch))
         bail(E_PROCESSINGFILE);
+}
+
+/**
+ * Adiciona o registro apontado pela posição atual do arquivo `f` no índice
+ * (árvore B, `b_tree_index_t *`) armazenado em `data`.
+ *
+ * Usado como parâmetro de callback para a função `file_traverse_seq`.
+ */
+static void add_to_index(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+{
+    b_tree_index_t *index = data;
+
+    // A função `file_traverse_seq` garante que a posição atual do arquivo será
+    // o offset onde se encontra o registro cada vez que a callback for chamada
+    long offset = ftell(f);
+
+    b_tree_insert(index, rec->attack_id, offset);
 }
 
 int main(void)
@@ -374,6 +415,9 @@ int main(void)
                 // Retorna à posição inicial, após o header
                 fseek(f, sizeof(PACKED(f_header_t)), SEEK_SET);
 
+                // NOTE: embora a função `file_traverse_seq` poderia ter sido usada aqui,
+                // seu uso tornaria mais difícil a compreensão da variável `no_matches`
+                // ao ler o código, pois C não possui closures.
                 while (file_search_seq_next(f, &header, filter, &rec, &unique) != -1) {
                     file_print_data_rec(&header, &rec);
 
@@ -474,6 +518,34 @@ int main(void)
 
             file_cleanup_after_modify(f, &header);
 
+            break;
+        }
+        case FUNC_CREATE_INDEX: {
+            FILE *f = file_open_from_stdin(&header, "rb");
+            b_tree_index_t *index = b_tree_open_from_stdin("wb+");
+
+            b_tree_add_hook(index, hash_file_b_hook, B_HOOK_CLOSE, NULL);
+
+            vset_t *empty = vset_new();
+            file_traverse_seq(f, &header, empty, add_to_index, index);
+            vset_free(empty);
+
+            file_cleanup_after_modify(f, &header);
+            b_tree_close(index);
+
+            break;
+        }
+        case FUNC_SELECT_WHERE_I: {
+            break;
+        }
+        case FUNC_INSERT_INTO_I: {
+            break;
+        }
+        case FUNC_DELETE_WHERE_I: {
+            /** NOTIMPLEMENTED */
+            break;
+        }
+        case FUNC_UPDATE_WHERE_I: {
             break;
         }
     }
