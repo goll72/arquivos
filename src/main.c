@@ -281,12 +281,12 @@ static void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 typedef struct {
     FILE *f;
     f_header_t *header;
-    vset_t *filter;
 
+    vset_t *filter;
     bool found;
 } b_select_params_t;
 
-static bool b_select(uint32_t key, uint32_t offset, void *data)
+static bool b_select(uint32_t key, uint64_t offset, void *data)
 {
     b_select_params_t *params = data;
 
@@ -308,20 +308,40 @@ static bool b_select(uint32_t key, uint32_t offset, void *data)
 }
 
 typedef struct {
+    FILE *f;
+    f_header_t *header;
+
+    vset_t *filter;
     vset_t *patch;
     b_tree_index_t *index;
 } b_update_params_t;
 
-static void b_update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+static bool b_update(uint32_t key, uint64_t offset, void *data)
 {
     b_update_params_t *params = data;
 
-    uint64_t offset;
+    fseek(params->f, offset, SEEK_SET);
     
-    if (!crud_update(f, header, rec, params->patch, &offset))
+    f_data_rec_t rec;
+    file_read_data_rec(params->f, params->header, &rec);
+
+    if (params->filter && !vset_match_against(params->filter, &rec, NULL)) {
+        rec_free_var_data_fields(&rec);
+        return true;
+    }
+
+    fseek(params->f, offset, SEEK_SET);
+
+    uint64_t new_offset;
+    
+    if (!crud_update(params->f, params->header, &rec, params->patch, &new_offset))
         bail(E_PROCESSINGFILE);
 
-    b_tree_insert(params->index, rec->attack_id, offset);
+    if (new_offset != offset)
+        b_tree_insert(params->index, rec.attack_id, new_offset);
+
+    rec_free_var_data_fields(&rec);
+    return true;
 }
 
 /**
@@ -652,6 +672,16 @@ int main(void)
                 if (vset_id(patch))
                     bail(E_PROCESSINGFILE);
 
+                b_update_params_t params = {
+                    .f = f,
+                    .header = &header,
+
+                    .filter = filter,
+                    .patch = patch,
+                    
+                    .index = index
+                };
+
                 // Se a busca envolver o ID, usa o arquivo de índice (árvore B)
                 if (id) {
                     uint64_t offset;
@@ -663,33 +693,13 @@ int main(void)
                         continue;
                     }
 
-                    fseek(f, offset, SEEK_SET);
-
-                    f_data_rec_t rec;
-                    file_read_data_rec(f, &header, &rec);
-
-                    if (!vset_match_against(filter, &rec, NULL))
-                        continue;
-
-                    fseek(f, offset, SEEK_SET);
-
-                    uint64_t new_offset;
-                    crud_update(f, &header, &rec, patch, &new_offset);
-
-                    if (new_offset != offset)
-                        b_tree_insert(index, rec.attack_id, new_offset);
-
-                    rec_free_var_data_fields(&rec);
+                    b_update(*id, offset, &params);
                 } else {
-                    b_update_params_t params = {
-                        .patch = patch,
-                        .index = index
-                    };
-                    
-                    // Percorre o arquivo de dados sequencialmente, chamando a função `update`
-                    // para cada um dos registros válidos (não removidos) encontrados
-                    // que passam no filtro `filter`
-                    file_traverse_seq(f, &header, filter, b_update, &params);
+                    // Percorre o arquivo de índice sequencialmente, chamando a função
+                    // `b_update` para cada um dos registros válidos (não removidos)
+                    // encontrados, a função `b_update` irá testar se o registro passa
+                    // no filtro antes de fazer a atualização
+                    b_tree_traverse(index, b_update, &params);
                 }
 
                 vset_free(filter);

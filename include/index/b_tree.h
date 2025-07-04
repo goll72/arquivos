@@ -56,7 +56,7 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset);
  */
 bool b_tree_remove(b_tree_index_t *tree, uint32_t key);
 
-typedef bool b_traverse_cb_t(uint32_t key, uint32_t offset, void *data);
+typedef bool b_traverse_cb_t(uint32_t key, uint64_t offset, void *data);
 
 /**
  * Percorre a árvore B em profundidade, ordenadamente, chamando para cada chave
