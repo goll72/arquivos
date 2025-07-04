@@ -656,9 +656,7 @@ static char *b_tree_copy_subnodes_skipping_over(char *restrict dest, char *restr
 
     // Realiza duas cópias separadas, da parte "predecessora"
     // e da parte "sucessora" ao índice a ser pulado.
-    size_t len_prec = skip_index
-                          ? SIZE_LEFT + skip_index * SUBNODE_SKIP
-                          : 0;
+    size_t len_prec = SIZE_LEFT + skip_index * SUBNODE_SKIP;
 
     memcpy(dest, src, len_prec);
 
