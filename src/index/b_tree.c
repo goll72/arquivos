@@ -991,6 +991,19 @@ static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
 }
 
 /**
+ * Verifica se houve troca e se o subnó "despromovido"/"rebaixado" em `demoted`
+ * foi o subnó trocado. Nesse caso, finaliza a troca atribuindo-o ao subnó
+ * encontrado em um nó folha.
+ */ 
+void check_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params)
+{
+    if (demoted->key == params->key && params->swap.left != -1) {
+        demoted->key = params->swap.key;
+        demoted->offset = params->swap.offset;
+    }
+}
+
+/**
  * Tenta realizar uma redistribuição de chaves entre as páginas `left`, `right`
  * e `parent`, de modo que `parent` contém no índice `parent_search_index` o
  * subnó pai de `left` e `right`. `del_index` deve corresponder ao índice onde
@@ -1018,9 +1031,6 @@ static bool b_tree_try_redistribute(b_tree_index_t *const tree,
     // Tamanho das páginas `left` e `right` antes da redistribuição ocorrer de fato
     int32_t len_left = *NODE_LEN_P(left);
     int32_t len_right = *NODE_LEN_P(right);
-
-    int32_t len_left_a = len_left;
-    int32_t len_right_a = len_right;
 
     // Por definição da árvore B, os nós `left` e `right` têm o mesmo tipo
     enum b_node_type type = *NODE_TYPE_P(left);
@@ -1085,25 +1095,21 @@ static bool b_tree_try_redistribute(b_tree_index_t *const tree,
         b_tree_shift_remove_subnode(left, del_index);
 
         len_left--;
-        len_left_a--;
     } else if (del_index < len_left) {
         skip = SKIP_SRC;
 
-        len_left_a--;
+        len_left--;
     } else {
         del_index -= len_left;
 
         if (del_index < n) {
             skip = SKIP_DEST;
-
-            len_right_a--;
         } else {
             skip = SKIP_NONE;
             b_tree_shift_remove_subnode(right, del_index);
-
-            len_right--;
-            len_right_a--;
         }
+
+        len_right--;
     }
 
     b_tree_subnode_t sub;
@@ -1114,26 +1120,18 @@ static bool b_tree_try_redistribute(b_tree_index_t *const tree,
     // obtido do pai é justamente esse subnó trocado; devemos finalizar a troca
     //
     // SYNC: b_subnode
-    if (sub.key == params->key && params->swap.left != -1) {
-        sub.key = params->swap.key;
-        sub.offset = params->swap.offset;
-    }
+    check_swap(&sub, params);
 
     char *end;
 
-    len_left = len_left_a;
-    len_right = len_right_a;
-
     len_diff = ABS(len_left - len_right);
 
+    // INFO: so fixpoint, much wow
     n = len_diff / 2;
     f = len_diff % 2;
 
-    if (len_left_a > len_right_a + 1) {
-        if (n == 0)
-            n += f;
-        else
-            n -= f;
+    if (len_left > len_right + 1) {
+        n -= f;
 
         assert(n > 0);
 
@@ -1179,7 +1177,8 @@ static bool b_tree_try_redistribute(b_tree_index_t *const tree,
         
         end = b_tree_copy_subnodes_skipping_over(dest, src, n - 1, del_index, skip);
 
-        //b_tree_get_subnode(right, n - 1, &sub, SUB_L);
+        // XXX
+        // b_tree_get_subnode(right, n - 1, &sub, SUB_L);
 
         // Copia a chave advinda da página pai para o começo da região
         // da página da esquerda que estava envolvida na cópia
@@ -1270,8 +1269,7 @@ static void b_tree_concat(b_tree_index_t *const tree,
 enum del_status {
     REMOVED_DIRECT,
     REMOVED_REDIST,
-    REMOVED_CONCAT_L,
-    REMOVED_CONCAT_R
+    REMOVED_CONCAT
 };
 
 /**
@@ -1322,11 +1320,7 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
     b_tree_subnode_t demoted;
     b_tree_get_subnode(parent, parent_search_index, &demoted, SUB_KEY | SUB_CLD);
 
-    // SYNC: b_subnode
-    if (demoted.key == params->key && params->swap.left != -1) {
-        demoted.key = params->swap.left;
-        demoted.offset = params->swap.offset;
-    }
+    check_swap(&demoted, params);
 
     if (demoted.left == page_rrn) {
         b_tree_page_t right;
@@ -1342,7 +1336,7 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
         // realizada, e será obtido um nó cheio, devido à inserção de `demoted`.
         b_tree_concat(tree, page_rrn, page, demoted.right, &right, del_index, &demoted);
 
-        return REMOVED_CONCAT_R;
+        return REMOVED_CONCAT;
     } else if (demoted.right == page_rrn) {
         b_tree_page_t left;
         b_tree_read_page(tree, demoted.left, &left);
@@ -1354,7 +1348,7 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
         
         b_tree_concat(tree, demoted.left, &left, page_rrn, page, del_index, &demoted);
 
-        return REMOVED_CONCAT_L;
+        return REMOVED_CONCAT;
     }
 
     __builtin_unreachable();
