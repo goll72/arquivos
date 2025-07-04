@@ -164,11 +164,11 @@ bool check_key_duplicity(FILE *f, size_t size, size_t page_size, bool use_color)
             fread(&key, sizeof key, 1, f);
 
             if (key >> 16) {
-                fprintf(stderr, "%s!%s key %x at page rrn=%x is greater than ffff\n",
+                fprintf(stdout, "%s!%s key %x at page rrn=%x is greater than ffff\n",
                         use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", key, i);
             } else {
                 if (present[key & 0x3ff] & (1u << (key >> 10))) {
-                    fprintf(stderr, "%sx%s key %x duplicated in tree\n",
+                    fprintf(stdout, "%sx%s key %x duplicated in tree\n",
                             use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key);
                     return false;
                 }
@@ -216,7 +216,7 @@ bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_col
             if (child_rrn >= 0 && child_rrn < n_pages) {
                 refs[child_rrn]++;
             } else if (child_rrn != -1) {
-                fprintf(stderr, "%sx%s invalid child rrn=%x\n",
+                fprintf(stdout, "%sx%s invalid child rrn=%x\n",
                         use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", child_rrn);
                 return false;
             }
@@ -231,7 +231,7 @@ bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_col
 
     for (int i = 0; i < n_pages; i++) {
         if (((refs[i] & PAGE_ZERO_SIZE) && refs[i] != PAGE_ZERO_SIZE)) {
-            fprintf(stderr, "%sx%s empty/root page rrn=%x has %d references\n",
+            fprintf(stdout, "%sx%s empty/root page rrn=%x has %d references\n",
                     use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", i, refs[i] ^ PAGE_ZERO_SIZE);
 
             free(refs);
@@ -240,7 +240,7 @@ bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_col
         }
 
         if (!refs[i]) {
-            fprintf(stderr, "%sx%s non-empty page rrn=%x has 0 references\n",
+            fprintf(stdout, "%sx%s non-empty page rrn=%x has 0 references\n",
                     use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", i);
 
             free(refs);
@@ -260,7 +260,7 @@ bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_col
 static bool check_ordering_impl(FILE *f, int rrn, size_t page_size, int64_t *largest, bool use_color, int level)
 {
     if (level >= 20) {
-        fprintf(stderr, "%s!%s stack likely blown, this is the %dth recursive call\n",
+        fprintf(stdout, "%s!%s stack likely blown, this is the %dth recursive call\n",
                 use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", level);
         return false;
     }
@@ -287,7 +287,7 @@ static bool check_ordering_impl(FILE *f, int rrn, size_t page_size, int64_t *lar
         fread(&key, sizeof key, 1, f);
 
         if (key <= *largest) {
-            fprintf(stderr, "%sx%s ordering property violated at key %x in page rrn=%x\n",
+            fprintf(stdout, "%sx%s ordering property violated at key %x in page rrn=%x\n",
                     use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key, rrn);
             return false;
         }
@@ -305,7 +305,7 @@ static bool check_ordering_impl(FILE *f, int rrn, size_t page_size, int64_t *lar
         return false;
 
     if (right_child != -1 && key >= *largest) {
-        fprintf(stderr, "%sx%s ordering property violated at key %x in page rrn=%x\n",
+        fprintf(stdout, "%sx%s ordering property violated at key %x in page rrn=%x\n",
                 use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key, rrn);
         return false;
     }
@@ -325,7 +325,7 @@ bool check_ordering(FILE *f, size_t size, size_t page_size, bool use_color)
     bool status = check_ordering_impl(f, root_rrn, page_size, &largest, use_color, 0);
 
     if (!status)
-        fprintf(stderr, "%sx%s tree does not satisfy ordering property\n",
+        fprintf(stdout, "%sx%s tree does not satisfy ordering property\n",
                 use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "");
 
     return status;
@@ -432,12 +432,8 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < COUNTOF(checks); i++) {
         fseek(f, 0L, SEEK_SET);
-        
-        if (!checks[i](f, size, page_size, use_color))
-            status = false;
+        checks[i](f, size, page_size, use_color);
     }
 
     fclose(f);
-
-    return !status;
 }

@@ -1,3 +1,7 @@
 [diff "hex"]
 	textconv = hexdump -C
 	binary = true
+
+[diff "b_tree"]
+	textconv = ./scripts/dump_b_tree
+	binary = true

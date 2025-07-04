@@ -1,1 +1,2 @@
 *.bin binary diff=hex
+indice*.bin binary diff=b_tree

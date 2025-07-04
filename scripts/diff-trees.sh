@@ -27,5 +27,5 @@ shopt -s globstar nullglob dotglob
 } > /dev/null
 
 for f in "${FILES[@]}"; do
-    ./scripts/diff.sh "$TREE_A/$f" "$TREE_B/$f"
+    ./scripts/diff.sh "$TREE_A/$f" "$TREE_B/$f" || :
 done
