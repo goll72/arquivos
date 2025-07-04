@@ -671,6 +671,8 @@ int main(void)
                     if (!vset_match_against(filter, &rec, NULL))
                         continue;
 
+                    fseek(f, offset, SEEK_SET);
+
                     uint64_t new_offset;
                     crud_update(f, &header, &rec, patch, &new_offset);
 
