@@ -1,4 +1,4 @@
-TESTS = 1 2 3 4 5 6 7 8 9 10 11 12 a1 a2 a3 a4 a5 a6 a7 a8
+TESTS = 1 2 3 4 5 6 7 8 9 10 11 12 a1 a2 a3 a4 a5 a6 a7 a8 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10
 
 TESTS_RUN = $(TESTS:%=$(BUILD)/tests/%.run)
 TESTS_FAILED = $(TESTS_RUN:.run=.failed)

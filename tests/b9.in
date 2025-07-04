@@ -1,0 +1,5 @@
+11 ataque109.bin indiceAtaque109.bin 2
+1 idAttack 1024
+2 country "UK" targetIndustry "EDUCATION"
+3 year 2024 targetIndustry "EDUCATION" attackType "PHISHING"
+2 country "UK" defenseMechanism "VPN" financial_loss 884150.00
