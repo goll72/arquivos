@@ -16,7 +16,9 @@
  * Insere o registro `rec` no arquivo `f`, usando o algoritmo
  * de reaproveitamento de espaço para determinar onde será
  * feita a inserção e fazendo os devidos ajustes no registro
- * de cabeçalho `header`.
+ * de cabeçalho `header`. Retorna `true` se a inserção ocorreu
+ * com sucesso, escrevendo em `*offset` o offset onde a inserção
+ * foi realizada.
  */
 bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec, uint64_t *offset);
 
@@ -34,6 +36,9 @@ bool crud_delete(FILE *f, f_header_t *header, f_data_rec_t *rec);
  *
  * Tenta realizar um update in-place (na mesma posição), se isso não for possível,
  * realiza uma remoção seguida por uma inserção.
+ *
+ * Retorna `true` se a atualização ocorreu com sucesso, escrevendo em `*offset` o
+ * offset onde a atualização foi realizada.
  */
 bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch, uint64_t *offset);
 

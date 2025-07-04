@@ -310,7 +310,9 @@ static void b_tree_read_page(b_tree_index_t *tree, uint32_t rrn, b_tree_page_t *
 {
     // Adicionamos 1 devido ao registro de cabeçalho
     fseek(tree->file, (rrn + 1) * PAGE_SIZE, SEEK_SET);
-    fread(page, PAGE_SIZE, 1, tree->file);
+    // Suprimir warnings `-Wunused-result` no runcodes
+    int _ = fread(page, PAGE_SIZE, 1, tree->file);
+    (void)_;
 }
 
 /**
@@ -855,6 +857,19 @@ static bool b_tree_insert_impl(b_tree_index_t *const tree, int32_t page_rrn, uin
 
         // Índice onde a inserção irá ocorrer, se houver espaço
         uint32_t ins_index = len ? b_tree_bin_search(page, key, &sub) : 0;
+
+        // A chave já existe na árvore: atualizamos o offset em
+        // vez de inserir uma nova chave ou retornar um erro
+        //
+        // SYNC: b_subnode
+        if (ins_index < len && key == sub.key) {
+            sub.offset = offset;
+
+            b_tree_put_subnode(page, ins_index, &sub, SUB_KEY);
+            b_tree_write_page_or_mark_dirty(tree, page_rrn, page);
+
+            return false;
+        }
 
         // SYNC: b_subnode
         sub.key = key;

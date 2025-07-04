@@ -149,6 +149,9 @@ bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch, 
     if (rec->size < old_size) {
         rec->size = old_size;
 
+        if (offset)
+            *offset = ftell(f);
+
         if (!file_write_data_rec(f, header, rec))
             return false;
 

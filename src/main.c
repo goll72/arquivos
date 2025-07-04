@@ -657,8 +657,6 @@ int main(void)
                     uint64_t offset;
 
                     if (!b_tree_search(index, *id, &offset)) {
-                        puts(E_NOREC);
-
                         vset_free(filter);
                         vset_free(patch);
 
@@ -671,7 +669,7 @@ int main(void)
                     file_read_data_rec(f, &header, &rec);
 
                     if (!vset_match_against(filter, &rec, NULL))
-                        bail(E_PROCESSINGFILE);
+                        continue;
 
                     uint64_t new_offset;
                     crud_update(f, &header, &rec, patch, &new_offset);
@@ -696,7 +694,7 @@ int main(void)
                 vset_free(patch);
             }
 
-            file_cleanup_after_modify(f, &header, false);
+            file_cleanup_after_modify(f, &header, true);
             b_tree_close(index);
 
             break;

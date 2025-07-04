@@ -114,6 +114,9 @@ static inline bool data_rec_typeinfo(const char *field_repr, size_t *offset, enu
         uint8_t flags;
     } info_arr[] = {
         #include "x/data.h"
+
+        // Nome alternativa para o campo `financial_loss` ("financialLoss") nos casos de teste
+        { "financial_loss", offsetof(PACKED(f_data_rec_t), financial_loss), T_FLT, 0 }
     };
 
     #undef X
