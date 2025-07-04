@@ -43,8 +43,10 @@ void b_tree_close(b_tree_index_t *tree);
 bool b_tree_search(b_tree_index_t *tree, uint32_t key, uint64_t *offset);
 
 /**
- * Insere um registro cuja chave é `key` e cujo offset é dado por
- * `offset` na árvore B.
+ * Insere um registro cuja chave é `key` e cujo offset é dado por `offset`
+ * na árvore B. A operação realizada é na verdade um "upsert": se a chave
+ * `key` já existir na árvore, seu offset correspondente é atualizado; se
+ * não existir, é inserida na árvore.
  */
 void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset);
 
@@ -53,6 +55,16 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset);
  * Retorna `true` se o elemento existia na árvore e foi removido.
  */
 bool b_tree_remove(b_tree_index_t *tree, uint32_t key);
+
+typedef bool b_traverse_cb_t(uint32_t key, uint32_t offset, void *data);
+
+/**
+ * Percorre a árvore B em profundidade, ordenadamente, chamando para cada chave
+ * a função `cb` com o parâmetro `data`.
+ *
+ * Se `cb` retornar `false`, o percurso será interrompido prematuramente.
+ */
+void b_tree_traverse(b_tree_index_t *tree, b_traverse_cb_t *cb, void *data);
 
 typedef void b_hook_cb_t(FILE *, void *);
 
