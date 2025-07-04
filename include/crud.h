@@ -18,7 +18,7 @@
  * feita a inserção e fazendo os devidos ajustes no registro
  * de cabeçalho `header`.
  */
-bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec);
+bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec, uint64_t *offset);
 
 /**
  * Remove o registro que se encontra na posição atual do arquivo `f`,
@@ -35,6 +35,6 @@ bool crud_delete(FILE *f, f_header_t *header, f_data_rec_t *rec);
  * Tenta realizar um update in-place (na mesma posição), se isso não for possível,
  * realiza uma remoção seguida por uma inserção.
  */
-bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch);
+bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch, uint64_t *offset);
 
 #endif /* CRUD_H */

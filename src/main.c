@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -166,7 +167,7 @@ static b_tree_index_t *b_tree_open_from_stdin(char *mode)
  * ao final do execução (apenas quando o arquivo tiver sido modificado),
  * como imprimir o seu hash. Por fim, fecha o arquivo.
  */
-static void file_cleanup_after_modify(FILE *f, f_header_t *header)
+static void file_cleanup_after_modify(FILE *f, f_header_t *header, bool print_hash)
 {
     // Marca o arquivo como "limpo"/consistente
     header->status = STATUS_CONSISTENT;
@@ -175,9 +176,8 @@ static void file_cleanup_after_modify(FILE *f, f_header_t *header)
     fseek(f, 0, SEEK_SET);
     file_write_header(f, header);
 
-    // Imprime o hash do arquivo, equivalente à função binarioNaTela
-    fseek(f, 0, SEEK_SET);
-    printf("%lf\n", hash_file(f));
+    if (print_hash)
+        printf("%lf\n", hash_file(f));
 
     fclose(f);
 }
@@ -274,8 +274,54 @@ static void update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
 {
     vset_t *patch = data;
 
-    if (!crud_update(f, header, rec, patch))
+    if (!crud_update(f, header, rec, patch, NULL))
         bail(E_PROCESSINGFILE);
+}
+
+typedef struct {
+    FILE *f;
+    f_header_t *header;
+    vset_t *filter;
+
+    bool found;
+} b_select_params_t;
+
+static bool b_select(uint32_t key, uint32_t offset, void *data)
+{
+    b_select_params_t *params = data;
+
+    fseek(params->f, offset, SEEK_SET);
+
+    f_data_rec_t rec;
+    file_read_data_rec(params->f, params->header, &rec);
+
+    if (!vset_match_against(params->filter, &rec, NULL)) {
+        rec_free_var_data_fields(&rec);
+        return true;
+    }
+
+    file_print_data_rec(params->header, &rec);
+    rec_free_var_data_fields(&rec);
+
+    params->found = true;
+    return true;
+}
+
+typedef struct {
+    vset_t *patch;
+    b_tree_index_t *index;
+} b_update_params_t;
+
+static void b_update(FILE *f, f_header_t *header, f_data_rec_t *rec, void *data)
+{
+    b_update_params_t *params = data;
+
+    uint64_t offset;
+    
+    if (!crud_update(f, header, rec, params->patch, &offset))
+        bail(E_PROCESSINGFILE);
+
+    b_tree_insert(params->index, rec->attack_id, offset);
 }
 
 /**
@@ -383,7 +429,7 @@ int main(void)
             header.next_byte_offset = ftell(bin_f);
 
             fclose(csv_f);
-            file_cleanup_after_modify(bin_f, &header);
+            file_cleanup_after_modify(bin_f, &header, true);
 
             break;
         }
@@ -466,12 +512,19 @@ int main(void)
                 vset_free(filter);
             }
 
-            file_cleanup_after_modify(f, &header);
+            file_cleanup_after_modify(f, &header, true);
 
             break;
         }
-        case FUNC_INSERT_INTO: {
+        case FUNC_INSERT_INTO:
+        case FUNC_INSERT_INTO_I: {
             FILE *f = file_open_from_stdin(&header, "rb+");
+            b_tree_index_t *index = NULL;
+
+            if (func == FUNC_INSERT_INTO_I) {
+                index = b_tree_open_from_stdin("rb+");
+                b_tree_add_hook(index, hash_file_b_hook, B_HOOK_CLOSE, NULL);
+            }
 
             int n_insertions;
             scanf_expect(1, "%d", &n_insertions);
@@ -485,15 +538,23 @@ int main(void)
                 f_data_rec_t rec;
                 rec_parse(stdin, F_TYPE_UNDELIM, &rec);
 
+                uint64_t offset;
+
                 // Insere o registro `rec` no arquivo, seguindo
                 // as regras do algoritmo de reúso de espaço
-                if (!crud_insert(f, &header, &rec))
+                if (!crud_insert(f, &header, &rec, &offset))
                     bail(E_PROCESSINGFILE);
+
+                if (func == FUNC_INSERT_INTO_I)
+                    b_tree_insert(index, rec.attack_id, offset);
 
                 rec_free_var_data_fields(&rec);
             }
 
-            file_cleanup_after_modify(f, &header);
+            file_cleanup_after_modify(f, &header, true);
+
+            if (func == FUNC_INSERT_INTO_I)
+                b_tree_close(index);
 
             break;
         }
@@ -516,7 +577,7 @@ int main(void)
                 vset_free(patch);
             }
 
-            file_cleanup_after_modify(f, &header);
+            file_cleanup_after_modify(f, &header, true);
 
             break;
         }
@@ -530,15 +591,41 @@ int main(void)
             file_traverse_seq(f, &header, empty, add_to_index, index);
             vset_free(empty);
 
-            file_cleanup_after_modify(f, &header);
+            file_cleanup_after_modify(f, &header, false);
             b_tree_close(index);
 
             break;
         }
         case FUNC_SELECT_WHERE_I: {
-            break;
-        }
-        case FUNC_INSERT_INTO_I: {
+            FILE *f = file_open_from_stdin(&header, "rb");
+            b_tree_index_t *index = b_tree_open_from_stdin("rb");
+
+            int n_queries;
+            scanf_expect(1, "%d", &n_queries);
+
+            b_select_params_t params = {
+                .f = f,
+                .header = &header
+            };
+
+            for (int i = 0; i < n_queries; i++) {
+                params.filter = vset_new_from_stdin();
+                params.found = false;
+
+                b_tree_traverse(index, b_select, &params);
+
+                if (!params.found) {
+                    puts(E_NOREC);
+                    printf("\n");
+                }
+
+                puts("**********");
+
+                vset_free(params.filter);
+            }
+
+            b_tree_close(index);
+
             break;
         }
         case FUNC_DELETE_WHERE_I: {
@@ -546,6 +633,72 @@ int main(void)
             break;
         }
         case FUNC_UPDATE_WHERE_I: {
+            FILE *f = file_open_from_stdin(&header, "rb+");
+            b_tree_index_t *index = b_tree_open_from_stdin("rb+");
+
+            // Imprime um hash do arquivo de dados da árvore B, ao final da execução
+            b_tree_add_hook(index, hash_file_b_hook, B_HOOK_CLOSE, NULL);
+
+            int n_queries;
+            scanf_expect(1, "%d", &n_queries);
+
+            for (int i = 0; i < n_queries; i++) {
+                vset_t *filter = vset_new_from_stdin();
+                vset_t *patch = vset_new_from_stdin();
+
+                const uint32_t *id = vset_id(filter);
+
+                // Atualização em um campo de ID não é permitido
+                if (vset_id(patch))
+                    bail(E_PROCESSINGFILE);
+
+                // Se a busca envolver o ID, usa o arquivo de índice (árvore B)
+                if (id) {
+                    uint64_t offset;
+
+                    if (!b_tree_search(index, *id, &offset)) {
+                        puts(E_NOREC);
+
+                        vset_free(filter);
+                        vset_free(patch);
+
+                        continue;
+                    }
+
+                    fseek(f, offset, SEEK_SET);
+
+                    f_data_rec_t rec;
+                    file_read_data_rec(f, &header, &rec);
+
+                    if (!vset_match_against(filter, &rec, NULL))
+                        bail(E_PROCESSINGFILE);
+
+                    uint64_t new_offset;
+                    crud_update(f, &header, &rec, patch, &new_offset);
+
+                    if (new_offset != offset)
+                        b_tree_insert(index, rec.attack_id, new_offset);
+
+                    rec_free_var_data_fields(&rec);
+                } else {
+                    b_update_params_t params = {
+                        .patch = patch,
+                        .index = index
+                    };
+                    
+                    // Percorre o arquivo de dados sequencialmente, chamando a função `update`
+                    // para cada um dos registros válidos (não removidos) encontrados
+                    // que passam no filtro `filter`
+                    file_traverse_seq(f, &header, filter, b_update, &params);
+                }
+
+                vset_free(filter);
+                vset_free(patch);
+            }
+
+            file_cleanup_after_modify(f, &header, false);
+            b_tree_close(index);
+
             break;
         }
     }

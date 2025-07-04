@@ -2,6 +2,7 @@
 
 #include "vset.h"
 #include "typeflags.h"
+#include "typeinfo.h"
 
 typedef struct vset_node vset_node_t;
 
@@ -21,6 +22,7 @@ struct vset_node {
 };
 
 struct vset {
+    uint32_t *id;
     vset_node_t *nodes;
 };
 
@@ -51,6 +53,11 @@ void vset_free(vset_t *vset)
     free(vset);
 }
 
+const uint32_t *vset_id(vset_t *vset)
+{
+    return vset->id;
+}
+
 void vset_add_value(vset_t *vset, size_t offset, enum typeinfo info, uint8_t typeflags, void *val)
 {
     vset_node_t *node = malloc(sizeof *node);
@@ -63,6 +70,9 @@ void vset_add_value(vset_t *vset, size_t offset, enum typeinfo info, uint8_t typ
 
     node->next = vset->nodes;
     vset->nodes = node;
+
+    if (node->info == T_U32 && (node->flags & F_UNIQUE) == F_UNIQUE)
+        vset->id = node->val;
 }
 
 bool vset_match_against(vset_t *vset, const void *obj, bool *unique)
@@ -131,7 +141,8 @@ bool vset_match_against(vset_t *vset, const void *obj, bool *unique)
         }
     }
 
-    *unique = unique_tmp;
+    if (unique)
+        *unique = unique_tmp;
 
     return true;
 }

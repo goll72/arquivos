@@ -3,7 +3,7 @@
 #include "vset.h"
 #include "crud.h"
 
-bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
+bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec, uint64_t *offset)
 {
     // Guarda o tamanho realmente ocupado pelo registro (em contraste
     // ao tamanho disponível para inserção em uma determinada posição,
@@ -89,6 +89,9 @@ bool crud_insert(FILE *f, f_header_t *header, f_data_rec_t *rec)
     if (insert_off == header->next_byte_offset)
         header->next_byte_offset = ftell(f);
 
+    if (offset)
+        *offset = insert_off;
+
     return true;
 }
 
@@ -121,7 +124,7 @@ bool crud_delete(FILE *f, f_header_t *header, f_data_rec_t *rec)
     return true;
 }
 
-bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch)
+bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch, uint64_t *offset)
 {
     uint64_t old_size = rec->size;
 
@@ -156,5 +159,5 @@ bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch)
 
     f_data_rec_t tmp = {};
 
-    return crud_delete(f, header, &tmp) && crud_insert(f, header, rec);
+    return crud_delete(f, header, &tmp) && crud_insert(f, header, rec, offset);
 }

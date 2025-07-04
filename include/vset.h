@@ -29,6 +29,12 @@ vset_t *vset_new(void);
 void vset_free(vset_t *);
 
 /**
+ * Retorna o ID de um determinado vset (valor inteiro com a
+ * flag `F_UNIQUE`), se houver.
+ */
+const uint32_t *vset_id(vset_t *);
+
+/**
  * Adiciona um valor ao vset.
  *
  * Se o campo relevante for uma string (`T_STR`), a comparação
