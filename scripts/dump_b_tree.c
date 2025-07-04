@@ -141,6 +141,202 @@ out:
     return !eof;
 }
 
+typedef bool check_t(FILE *, size_t size, size_t page_size, bool use_color);
+
+// Assumes all keys are < 65536 (= 2^16)
+bool check_key_duplicity(FILE *f, size_t size, size_t page_size, bool use_color)
+{
+    uint64_t present[1024] = {};
+    uint32_t n_pages = size / page_size;
+
+    for (int i = 1; i < n_pages; i++) {
+        fseek(f, i * page_size, SEEK_SET);
+
+        uint32_t n_keys;
+
+        fseek(f, 4, SEEK_CUR);
+        fread(&n_keys, sizeof n_keys, 1, f);
+
+        for (int i = 0; i < n_keys; i++) {
+            fseek(f, 4, SEEK_CUR);
+
+            uint32_t key;
+            fread(&key, sizeof key, 1, f);
+
+            if (key >> 16) {
+                fprintf(stderr, "%s!%s key %x at page rrn=%x is greater than ffff\n",
+                        use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", key, i);
+            } else {
+                if (present[key & 0x3ff] & (1u << (key >> 10))) {
+                    fprintf(stderr, "%sx%s key %x duplicated in tree\n",
+                            use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key);
+                    return false;
+                }
+
+                present[key & 0x3ff] |= 1u << (key >> 10);
+            }
+
+            fseek(f, 8, SEEK_CUR);
+        }
+    }
+
+    return true;
+}
+
+bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_color)
+{
+    uint32_t n_pages = (size - page_size) / page_size;
+    uint8_t *refs = malloc(n_pages);
+
+#define PAGE_REF_MASK  0x7f
+#define PAGE_ZERO_SIZE 0x80
+
+    memset(refs, 0, n_pages);
+
+    for (int i = 0; i < n_pages; i++) {
+        fseek(f, (i + 1) * page_size, SEEK_SET);
+
+        uint32_t type;
+        uint32_t n_keys;
+        uint32_t child_rrn;
+
+        fread(&type, sizeof type, 1, f);
+        fread(&n_keys, sizeof n_keys, 1, f);
+
+        // Pretend root is empty
+        if (type == 0 || n_keys == 0)
+            refs[i] |= PAGE_ZERO_SIZE;
+
+        for (int i = 0; i < n_keys + 1; i++) {
+            fread(&child_rrn, sizeof child_rrn, 1, f);
+
+            uint32_t key;
+            fread(&key, sizeof key, 1, f);
+
+            if (child_rrn >= 0 && child_rrn < n_pages) {
+                refs[child_rrn]++;
+            } else if (child_rrn != -1) {
+                fprintf(stderr, "%sx%s invalid child rrn=%x\n",
+                        use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", child_rrn);
+                return false;
+            }
+                
+
+            if (i == n_keys)
+                break;
+
+            fseek(f, 8, SEEK_CUR);
+        }
+    }
+
+    for (int i = 0; i < n_pages; i++) {
+        if (((refs[i] & PAGE_ZERO_SIZE) && refs[i] != PAGE_ZERO_SIZE)) {
+            fprintf(stderr, "%sx%s empty/root page rrn=%x has %d references\n",
+                    use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", i, refs[i] ^ PAGE_ZERO_SIZE);
+
+            free(refs);
+            
+            return false;
+        }
+
+        if (!refs[i]) {
+            fprintf(stderr, "%sx%s non-empty page rrn=%x has 0 references\n",
+                    use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", i);
+
+            free(refs);
+            
+            return false;
+        }
+    }
+
+#undef PAGE_REF_MASK
+#undef PAGE_ZERO_SIZE
+
+    free(refs);
+
+    return true;
+}
+
+static bool check_ordering_impl(FILE *f, int rrn, size_t page_size, int64_t *largest, bool use_color, int level)
+{
+    if (level >= 20) {
+        fprintf(stderr, "%s!%s stack likely blown, this is the %dth recursive call\n",
+                use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", level);
+        return false;
+    }
+
+    fseek(f, (rrn + 1) * page_size, SEEK_SET);
+
+    uint32_t key;
+    uint32_t n_keys;
+
+    fseek(f, 4, SEEK_CUR);
+    fread(&n_keys, sizeof n_keys, 1, f);
+
+    for (int i = 0; i < n_keys; i++) {
+        uint32_t left_child;
+        fread(&left_child, sizeof left_child, 1, f);
+
+        long off = ftell(f);
+
+        if (left_child != -1 && !check_ordering_impl(f, left_child, page_size, largest, use_color, level + 1))
+            return false;
+
+        fseek(f, off, SEEK_SET);
+
+        fread(&key, sizeof key, 1, f);
+
+        if (key <= *largest) {
+            fprintf(stderr, "%sx%s ordering property violated at key %x in page rrn=%x\n",
+                    use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key, rrn);
+            return false;
+        }
+        
+        fseek(f, 8, SEEK_CUR);
+
+        if (i == n_keys - 1 && left_child == -1)
+            *largest = key;
+    }
+
+    uint32_t right_child;
+    fread(&right_child, sizeof right_child, 1, f);
+
+    if (right_child != -1 && !check_ordering_impl(f, right_child, page_size, largest, use_color, level + 1))
+        return false;
+
+    if (right_child != -1 && key >= *largest) {
+        fprintf(stderr, "%sx%s ordering property violated at key %x in page rrn=%x\n",
+                use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", key, rrn);
+        return false;
+    }
+
+    return true;
+}
+
+bool check_ordering(FILE *f, size_t size, size_t page_size, bool use_color)
+{
+    fseek(f, 1, SEEK_SET);
+
+    uint32_t root_rrn;
+    fread(&root_rrn, sizeof root_rrn, 1, f);
+
+    int64_t largest = INT64_MIN;
+    
+    bool status = check_ordering_impl(f, root_rrn, page_size, &largest, use_color, 0);
+
+    if (!status)
+        fprintf(stderr, "%sx%s tree does not satisfy ordering property\n",
+                use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "");
+
+    return status;
+}
+
+check_t *checks[] = {
+    check_key_duplicity,
+    check_child_references,
+    check_ordering
+};
+
 int main(int argc, char **argv)
 {
     int opt;
@@ -230,5 +426,18 @@ int main(int argc, char **argv)
         fprintf(stdout, "%.*x ", rrn_digits, cur_rrn++);
     } while (print_data(f, data, COUNTOF(data), page_size, use_color));
 
+    fputc('\n', stdout);
+
+    bool status = true;
+
+    for (int i = 0; i < COUNTOF(checks); i++) {
+        fseek(f, 0L, SEEK_SET);
+        
+        if (!checks[i](f, size, page_size, use_color))
+            status = false;
+    }
+
     fclose(f);
+
+    return !status;
 }
