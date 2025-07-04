@@ -152,12 +152,7 @@ bool crud_update(FILE *f, f_header_t *header, f_data_rec_t *rec, vset_t *patch, 
         if (offset)
             *offset = ftell(f);
 
-        if (!file_write_data_rec(f, header, rec))
-            return false;
-
-        header->n_valid_recs++;
-
-        return true;
+        return file_write_data_rec(f, header, rec);
     }
 
     f_data_rec_t tmp = {};
