@@ -20,7 +20,8 @@
 /**
  * Implementação de uma árvore B genérica, flexível quanto ao tamanho
  * da página: basta alterar o valor da macro `PAGE_SIZE` para usar um
- * tamanho diferente de página de disco.
+ * tamanho diferente de página de disco (a maior quantidade possível
+ * de chaves será usada).
  */
 
 #define PAGE_SIZE 44
@@ -110,7 +111,7 @@ typedef struct {
 /** Ponteiro para o tamanho do nó (quantidade de chaves armazenadas) */
 #define NODE_LEN_P(p)  ((uint32_t *)&(p)->data[4])
 /** Ponteiro para os dados do nó */
-#define NODE_DATA_P(p) &(p)->data[8]
+#define NODE_DATA_P(p) __builtin_assume_aligned(&(p)->data[8], 4)
 
 enum b_node_type {
     /**
@@ -438,9 +439,9 @@ static inline b_tree_page_t *b_tree_adequate_page(b_tree_index_t *const tree,
     return non_root;
 }
 
-/** Retorna um ponteiro para o filho esquerdo do subnó com índice `n` na página `p` (`b_tree_page_t *`) */ 
+/** Ponteiro para o filho esquerdo do subnó com índice `n` na página `p` (`b_tree_page_t *`) */ 
 #define LEFT_CHILD_OF(p, n) (uint32_t *)(NODE_DATA_P(p) + SUBNODE_SKIP * (n))
-/** Retorna um ponteiro para o filho direito do subnó com índice `n` na página `p` (`b_tree_page_t *`) */
+/** Ponteiro para o filho direito do subnó com índice `n` na página `p` (`b_tree_page_t *`) */
 #define RIGHT_CHILD_OF(p, n) LEFT_CHILD_OF(p, n + 1)
 
 /**
@@ -602,10 +603,10 @@ bool b_tree_search(b_tree_index_t *tree, uint32_t key, uint64_t *offset)
 
 /**
  * Insere o subnó `sub` na posição `index` da página `page` da árvore B,
- * deslocando os nós à direita, se necessário, e incrementando o tamanho
- * (quantidade de nós armazenados) da página.
+ * deslocando os subnós à direita, se necessário, e incrementando o
+ * tamanho (quantidade de nós armazenados) da página.
  *
- * Deve haver espaço para mais um nó na página. Caso não haja, o
+ * Deve haver espaço para mais um subnó na página. Caso não haja, o
  * comportamento dessa função é indefinido.
  */ 
 static void b_tree_shift_insert_subnode(b_tree_page_t *page, uint32_t index, b_tree_subnode_t *sub)
@@ -696,8 +697,8 @@ static char *b_tree_copy_subnodes_skipping_over(char *restrict dest, char *restr
  *
  * Retorna o RRN da nova página.
  */
-int32_t b_tree_split(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new,
-                          uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
+static int32_t b_tree_split(b_tree_index_t *tree, b_tree_page_t *page, b_tree_page_t *new,
+                            uint32_t ins_index, b_tree_subnode_t *sub, b_tree_subnode_t *promoted)
 {
     int32_t new_rrn = b_tree_new_page(tree);
     b_tree_init_page(new);
@@ -1007,7 +1008,7 @@ static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
  * encontrado em um nó folha, contido em `params->swap` (porém preservando os
  * filhos encontrados no subnó em um nível intermediário).
  */ 
-void check_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params)
+static void check_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params)
 {
     if (demoted->key == params->key && params->swap.left != -1) {
         demoted->key = params->swap.key;

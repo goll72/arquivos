@@ -726,7 +726,7 @@ int main(void)
 
                     b_update(*id, &offset, &params);
                 } else {
-                    // Percorre o arquivo de índice sequencialmente, chamando a função
+                    // Percorre o arquivo de índice ordenadamente, chamando a função
                     // `b_update` para cada um dos registros válidos (não removidos)
                     // encontrados, a função `b_update` irá testar se o registro passa
                     // no filtro antes de fazer a atualização
