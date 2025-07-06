@@ -1035,11 +1035,11 @@ static void check_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params
  * possível atualizá-la mediante a redistribuição e lidar com o caso em que, durante
  * a remoção, houve troca com o subnó de `parent` envolvido na redistribuição
  */
-static bool b_tree_try_redistribute(b_tree_index_t *const tree,
-                                    b_tree_page_t *left, b_tree_page_t *right,
-                                    b_tree_page_t *parent, uint32_t del_index,
-                                    uint32_t parent_search_index,
-                                    b_tree_remove_params_t *params)
+static bool b_tree_try_redist(b_tree_index_t *const tree,
+                              b_tree_page_t *left, b_tree_page_t *right,
+                              b_tree_page_t *parent, uint32_t del_index,
+                              uint32_t parent_search_index,
+                              b_tree_remove_params_t *params)
 {
     // Tamanho das páginas `left` e `right` antes da redistribuição ocorrer de fato
     int32_t len_left = *NODE_LEN_P(left);
@@ -1220,8 +1220,7 @@ static bool b_tree_try_redistribute(b_tree_index_t *const tree,
  * índice `del_index`.
  */
 static void b_tree_concat(b_tree_index_t *const tree,
-                          int32_t left_rrn, b_tree_page_t *left,
-                          int32_t right_rrn, b_tree_page_t *right,
+                          b_tree_page_t *left, b_tree_page_t *right,
                           uint32_t del_index, b_tree_subnode_t *demoted)
 {
     size_t len_left = *NODE_LEN_P(left);
@@ -1263,7 +1262,7 @@ static void b_tree_concat(b_tree_index_t *const tree,
     // (+ 1 - 1) devido ao subnó "rebaixado" e ao subnó removido
     *NODE_LEN_P(left) = len_left + len_right;
     
-    b_tree_write_page(tree, left_rrn, left);
+    b_tree_write_page(tree, demoted->left, left);
 
     // INFO: (decisão de projeto/não especificado)
     //
@@ -1271,7 +1270,7 @@ static void b_tree_concat(b_tree_index_t *const tree,
     // inicializadas antes de serem escritas de volta no arquivo de dados,
     // visando facilitar a depuração do código
     b_tree_init_page(right);
-    b_tree_write_page(tree, right_rrn, right);
+    b_tree_write_page(tree, demoted->right, right);
 
     tree->n_pages--;
 }
@@ -1336,7 +1335,7 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
         b_tree_page_t right;
         b_tree_read_page(tree, demoted.right, &right);
 
-        if (b_tree_try_redistribute(tree, page, &right, parent, del_index, parent_search_index, params))
+        if (b_tree_try_redist(tree, page, &right, parent, del_index, parent_search_index, params))
             return REMOVED_REDIST;
 
         // Sempre haverá espaço para concatenar, pois a concatenação só é feita se
@@ -1344,7 +1343,7 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
         // entre `page` e sua página irmã é menor que o dobro da taxa de ocupação
         // mínima). Sendo assim, na primeira oportunidade, a concatenação será
         // realizada, e será obtido um nó cheio, devido à inserção de `demoted`.
-        b_tree_concat(tree, page_rrn, page, demoted.right, &right, del_index, &demoted);
+        b_tree_concat(tree, page, &right, del_index, &demoted);
 
         return REMOVED_CONCAT;
     } else if (demoted.right == page_rrn) {
@@ -1353,10 +1352,10 @@ static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t
 
         del_index += *NODE_LEN_P(&left);
 
-        if (b_tree_try_redistribute(tree, &left, page, parent, del_index, parent_search_index, params))
+        if (b_tree_try_redist(tree, &left, page, parent, del_index, parent_search_index, params))
             return REMOVED_REDIST;
         
-        b_tree_concat(tree, demoted.left, &left, page_rrn, page, del_index, &demoted);
+        b_tree_concat(tree, &left, page, del_index, &demoted);
 
         return REMOVED_CONCAT;
     }
@@ -1468,12 +1467,14 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
         next_rrn = sub.right;
    
     enum del_status status = b_tree_remove_impl(tree, next_rrn, page, del_index, params);
+    
+    if (status == REMOVED_DIRECT && params->swap.left != -1 && params->key == sub.key)
+        b_tree_put_subnode(page, del_index, &params->swap, SUB_KEY);
 
-    if (status == REMOVED_REDIST)
+    if (status == REMOVED_REDIST || status == REMOVED_DIRECT) {
         b_tree_write_page_or_mark_dirty(tree, page_rrn, page);
-
-    if (status == REMOVED_REDIST || status == REMOVED_DIRECT)
         return REMOVED_DIRECT;
+    }
 
     // Faríamos uma remoção na raiz que a tornaria vazia, devemos estabelecer o filho esquerdo
     // (que permaneceu após a concatenação) como novo nó raiz, diminuindo a altura da árvore
