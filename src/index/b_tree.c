@@ -80,14 +80,16 @@ typedef struct {
 /** Quantidade de chaves que podem ser armazenadas em um nó/uma página da árvore */
 #define N_KEYS ((PAGE_SIZE - PAGE_META_SIZE - SIZE_LEFT) / SUBNODE_SKIP)
 
-/** Taxa de ocupação mínima de um nó intermediário (não-raiz e não-folha) */
-#define MIN_OCCUPANCY_INTM (N_KEYS / 2)
-
-/** Taxa de ocupação mínima de um nó folha */
-#define MIN_OCCUPANCY_LEAF (N_KEYS / 2 + N_KEYS % 2)
-
 /** Ordem da árvore */
 #define TREE_ORDER (N_KEYS + 1)
+
+/** NOTE: (x + 1) / 2 == (int)ceil(x / 2.0) */
+
+/** Taxa de ocupação mínima de um nó intermediário (não-raiz e não-folha) */
+#define MIN_OCCUPANCY_INTM ((TREE_ORDER + 1) / 2)
+
+/** Taxa de ocupação mínima de um nó folha */
+#define MIN_OCCUPANCY_LEAF ((TREE_ORDER + 1) / 2 - 1)
 
 /** Verdadeiro se houver espaço no final da página da árvore, que deverá ser preenchido com '$' */
 #define TREE_PAGE_NEEDS_PADDING N_KEYS * SUBNODE_SKIP + SIZE_LEFT < PAGE_SIZE - PAGE_META_SIZE
@@ -679,7 +681,7 @@ static char *b_tree_copy_subnodes_skipping_over(char *restrict dest, char *restr
     // Subtraímos 1 pois queremos a quantidade de subnós após `skip_index`,
     // não incluindo o próprio subnó nessa posição
     size_t len_succ = n - skip_index - 1 > 0
-                          ? SIZE_LEFT + (n - skip_index - 1) * SUBNODE_SKIP
+                          ? (n - skip_index - 1) * SUBNODE_SKIP
                           : 0;
 
     memcpy(dest_succ, src_succ, len_succ);
@@ -962,8 +964,8 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
 
 
 /**
- * IMPORTANT: a seguir, temos a implementação da remoção para a árvore B (eu sei que não
- * precisava implementar). Se você quiser pular o código da remoção, vá para a linha 1532.
+ * IMPORTANT: a seguir, foi implementada a remoção na árvore B (eu sei que não precisava
+ * implementar). Se você quiser pular o código da remoção, vá para a linha 1534.
  */
 
 
@@ -1194,7 +1196,7 @@ static bool b_tree_try_redist(b_tree_index_t *const tree,
         *NODE_LEN_P(left) = len_left + n;
         *NODE_LEN_P(right) = len_right - n;
         
-        end = b_tree_copy_subnodes_skipping_over(dest, src, n - 1, del_index, skip);
+        b_tree_copy_subnodes_skipping_over(dest, src, n - 1, del_index, skip);
 
         // Copia a chave advinda da página pai para o começo da região
         // da página da esquerda que estava envolvida na cópia
@@ -1204,7 +1206,7 @@ static bool b_tree_try_redist(b_tree_index_t *const tree,
         b_tree_get_subnode(right, n - 1, &sub, SUB_KEY);
 
         size_t len = SIZE_LEFT + SUBNODE_SKIP * (len_right - n);
-        memmove(src, src + n * SUBNODE_SKIP, len);
+        end = mempmove(src, src + n * SUBNODE_SKIP, len);
 
         // Após realizar a cópia, inicializa a fonte para o valor padrão (-1)
         memset(end + SUBNODE_SKIP, -1, n * SUBNODE_SKIP);
@@ -1402,10 +1404,13 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
 
     size_t len = *NODE_LEN_P(page);
 
-    // Esse caso só irá acontecer se a árvore estiver vazia, no entanto,
-    // deve ser tratado
+    // Esse caso só irá acontecer se a árvore estiver vazia,
+    // no entanto, deve ser tratado
+    // 
+    // NOTE: o efeito de remover diretamente e não realizar
+    // uma remoção é o mesmo para quem chamou essa função
     if (len == 0)
-        return false;
+        return REMOVED_DIRECT;
 
     b_tree_subnode_t sub;
     // Índice que seria removido, se o nó atual contivesse o subnó a ser removido
@@ -1419,7 +1424,7 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
     if (*NODE_TYPE_P(page) == NODE_TYPE_LEAF) {
         // A chave buscada não foi encontrada na árvore
         if (del_index == len)
-            return false;
+            return REMOVED_DIRECT;
 
         params->found = true;
 
@@ -1434,8 +1439,6 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
             // contém o valor inválido com o qual foi inicializado, em vez
             // de um RRN válido.
             //
-            // NOTE: o efeito de remover diretamente e não realizar uma
-            // remoção é o mesmo para quem chamou essa função
             if (params->swap.left == -1)
                 return REMOVED_DIRECT;
 
@@ -1497,10 +1500,9 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
         b_tree_init_page(&tree->root);
         b_tree_write_page(tree, tree->root_rrn, &tree->root);
 
-        tree->n_pages--;
-        
+        tree->n_pages--;        
         tree->root_rrn = sub.left;
-        
+
         b_tree_read_page(tree, tree->root_rrn, &tree->root);
 
         // Se o tipo do filho do antigo nó raiz era `NODE_TYPE_LEAF`,

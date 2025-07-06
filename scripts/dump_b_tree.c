@@ -157,7 +157,7 @@ bool check_key_duplicity(FILE *f, size_t size, size_t page_size, bool use_color)
         fseek(f, 4, SEEK_CUR);
         fread(&n_keys, sizeof n_keys, 1, f);
 
-        for (int i = 0; i < n_keys; i++) {
+        for (int j = 0; j < n_keys; j++) {
             fseek(f, 4, SEEK_CUR);
 
             uint32_t key;
@@ -165,7 +165,7 @@ bool check_key_duplicity(FILE *f, size_t size, size_t page_size, bool use_color)
 
             if (key >> 16) {
                 fprintf(stdout, "%s!%s key %x at page rrn=%x is greater than ffff\n",
-                        use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", key, i);
+                        use_color ? colors[COLOR_YELLOW] : "", use_color ? colors[COLOR_NONE] : "", key, i - 1);
             } else {
                 if (present[key & 0x3ff] & (1u << (key >> 10))) {
                     fprintf(stdout, "%sx%s key %x duplicated in tree\n",
