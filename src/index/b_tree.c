@@ -963,7 +963,7 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
 
 /**
  * IMPORTANT: a seguir, temos a implementação da remoção para a árvore B (eu sei que não
- * precisava implementar). Se você quiser pular o código da remoção, vá para a linha 1523 (XXX).
+ * precisava implementar). Se você quiser pular o código da remoção, vá para a linha 1532.
  */
 
 
@@ -1002,6 +1002,12 @@ static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
     memset(end, -1, SUBNODE_SKIP);
 }
 
+/** Retorna `true` se houve troca e o subnó `demoted` foi o subnó com a chave trocada. */
+static inline bool should_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params)
+{
+    return demoted->key == params->key && params->swap.left != -1;
+}
+
 /**
  * Verifica se houve troca e se o subnó "despromovido"/"rebaixado" em `demoted`
  * foi o subnó trocado. Nesse caso, finaliza a troca atribuindo-o ao subnó
@@ -1010,7 +1016,7 @@ static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
  */ 
 static void check_swap(b_tree_subnode_t *demoted, b_tree_remove_params_t *params)
 {
-    if (demoted->key == params->key && params->swap.left != -1) {
+    if (should_swap(demoted, params)) {
         demoted->key = params->swap.key;
         demoted->offset = params->swap.offset;
     }
@@ -1467,8 +1473,9 @@ static enum del_status b_tree_remove_impl(b_tree_index_t *const tree, int32_t pa
         next_rrn = sub.right;
    
     enum del_status status = b_tree_remove_impl(tree, next_rrn, page, del_index, params);
-    
-    if (status == REMOVED_DIRECT && params->swap.left != -1 && params->key == sub.key)
+
+    // Nos outros casos, a troca já foi finalizada em `b_tree_perform_remove`
+    if (status == REMOVED_DIRECT && should_swap(&sub, params))
         b_tree_put_subnode(page, del_index, &params->swap, SUB_KEY);
 
     if (status == REMOVED_REDIST || status == REMOVED_DIRECT) {
