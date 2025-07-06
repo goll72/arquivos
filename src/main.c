@@ -286,25 +286,31 @@ typedef struct {
     bool found;
 } b_select_params_t;
 
-static bool b_select(uint32_t key, uint64_t offset, void *data)
+/**
+ * Verifica se o registro em `*offset` passa no filtro dado por
+ * `params->filter` e, se passar, o imprime. Usado como parâmetro
+ * de callback para a função `b_tree_traverse`, para implementar
+ * a funcionalidade `FUNC_SELECT_WHERE_I`.
+ */
+static int b_select(uint32_t key, uint64_t *offset, void *data)
 {
     b_select_params_t *params = data;
 
-    fseek(params->f, offset, SEEK_SET);
+    fseek(params->f, *offset, SEEK_SET);
 
     f_data_rec_t rec;
     file_read_data_rec(params->f, params->header, &rec);
 
     if (!vset_match_against(params->filter, &rec, NULL)) {
         rec_free_var_data_fields(&rec);
-        return true;
+        return B_TRAVERSE_CONTINUE;
     }
 
     file_print_data_rec(params->header, &rec);
     rec_free_var_data_fields(&rec);
 
     params->found = true;
-    return true;
+    return B_TRAVERSE_CONTINUE;
 }
 
 typedef struct {
@@ -316,32 +322,57 @@ typedef struct {
     b_tree_index_t *index;
 } b_update_params_t;
 
-static bool b_update(uint32_t key, uint64_t offset, void *data)
+/**
+ * Função usada para fazer atualização de registros, usando o
+ * arquivo de índice (árvore B). Pode ser usada como parâmetro
+ * de callback para a função `b_tree_traverse` ou pode ser
+ * chamada manualmente, após uma busca na árvore.
+ */
+static int b_update(uint32_t key, uint64_t *offset, void *data)
 {
     b_update_params_t *params = data;
 
-    fseek(params->f, offset, SEEK_SET);
+    // Lê o registro a partir do offset encontrado na árvore B
+    fseek(params->f, *offset, SEEK_SET);
     
     f_data_rec_t rec;
     file_read_data_rec(params->f, params->header, &rec);
 
-    if (params->filter && !vset_match_against(params->filter, &rec, NULL)) {
+    // Se não passar no filtro/teste, pulamos para o próximo
+    if (!vset_match_against(params->filter, &rec, NULL)) {
         rec_free_var_data_fields(&rec);
-        return true;
+        return B_TRAVERSE_CONTINUE;
     }
 
-    fseek(params->f, offset, SEEK_SET);
+    // Retorna ao offset onde a atualização será realizada
+    fseek(params->f, *offset, SEEK_SET);
 
     uint64_t new_offset;
     
     if (!crud_update(params->f, params->header, &rec, params->patch, &new_offset))
         bail(E_PROCESSINGFILE);
 
-    if (new_offset != offset)
-        b_tree_insert(params->index, rec.attack_id, new_offset);
-
     rec_free_var_data_fields(&rec);
-    return true;
+
+    // Se a alteração não foi in-place (offset diferente),
+    // devemos atualizar o offset correspondente na árvore B
+    if (new_offset != *offset) {
+        // Se a busca inclui o campo ID, essa função foi chamada
+        // no contexto de uma única busca na árvore, logo devemos
+        // fazer um "upsert" explicitamente. Se não incluir o ID,
+        // essa função foi chamada no contexto do percurso em
+        // profundidade (DFS) da árvore, de modo que o offset da
+        // chave será atualizado por meio do out parameter
+        // `offset` ao retornarmos `B_TRAVERSE_UPDATE`.
+        if (vset_id(params->filter))
+            b_tree_insert(params->index, rec.attack_id, new_offset);
+        else
+            *offset = new_offset;
+
+        return B_TRAVERSE_UPDATE;
+    }
+
+    return B_TRAVERSE_CONTINUE;
 }
 
 /**
@@ -693,7 +724,7 @@ int main(void)
                         continue;
                     }
 
-                    b_update(*id, offset, &params);
+                    b_update(*id, &offset, &params);
                 } else {
                     // Percorre o arquivo de índice sequencialmente, chamando a função
                     // `b_update` para cada um dos registros válidos (não removidos)

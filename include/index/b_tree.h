@@ -56,16 +56,31 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset);
  */
 bool b_tree_remove(b_tree_index_t *tree, uint32_t key);
 
-typedef bool b_traverse_cb_t(uint32_t key, uint64_t offset, void *data);
+/**
+ * Flags que podem ser retornadas pela função de callback do percurso, `b_traverse_cb_t`.
+ */
+
+/** Indica que o percurso deve continuar (mutualmente exclusivo com `B_TRAVERSE_ABORT`) */
+#define B_TRAVERSE_CONTINUE (0 << 0)  /* == 0 */
+/** Indica que o percurso deve ser interrompido prematuramente */
+#define B_TRAVERSE_ABORT    (1 << 0)
+/** Indica que essa visita a uma chave resultou em uma atualização do offset correspondente */
+#define B_TRAVERSE_UPDATE   (1 << 1)
+
+typedef int b_traverse_cb_t(uint32_t key, uint64_t *offset, void *data);
 
 /**
  * Percorre a árvore B em profundidade, ordenadamente, chamando para cada chave
- * a função `cb` com o parâmetro `data`.
- *
- * Se `cb` retornar `false`, o percurso será interrompido prematuramente.
+ * a função `cb` com o parâmetro `data`. `cb` pode retornar uma ou mais flags
+ * dentre as definidas acima.
  */
 void b_tree_traverse(b_tree_index_t *tree, b_traverse_cb_t *cb, void *data);
 
+/**
+ * Define o tipo usado para uma callback de hook da árvore B. O parâmetro
+ * `FILE *` corresponde ao arquivo de dados da árvore, já `void *` corresponde
+ * ao parâmetro `data` passado para `b_tree_add_hook`.
+ */
 typedef void b_hook_cb_t(FILE *, void *);
 
 /**
