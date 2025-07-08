@@ -654,16 +654,36 @@ int main(void)
             int n_queries;
             scanf_expect(1, "%d", &n_queries);
 
-            b_select_params_t params = {
-                .f = f,
-                .header = &header
-            };
-
             for (int i = 0; i < n_queries; i++) {
-                params.filter = vset_new_from_stdin();
-                params.found = false;
+                // Inicializa os parâmetros que serão passados para a função `b_select`
+                b_select_params_t params = {
+                    .f = f,
+                    .header = &header,
 
-                b_tree_traverse(index, b_select, &params);
+                    .filter = vset_new_from_stdin(),
+                    .found = false
+                };
+
+                const uint32_t *id = vset_id(params.filter);
+
+                // Se a busca envolver o ID, usa o arquivo de índice (árvore B)
+                if (id) {
+                    uint64_t offset;
+
+                    // Se a chave for encontrada na árvore, usa `b_select` para
+                    // fazer a verificação e impressão do registro correspondente;
+                    // se não for, atribui `params.found` para `false` para indicar
+                    // que não foram encontrados registros que passem no filtro
+                    if (b_tree_search(index, *id, &offset))
+                        b_select(*id, &offset, &params);
+                    else
+                        params.found = false;
+                } else {
+                    // Percorre o arquivo de índice em ordem, chamando para cada
+                    // uma das chaves a função `b_select`, que irá ler o registro
+                    // correspondente e imprimi-lo, se passar no filtro
+                    b_tree_traverse(index, b_select, &params);
+                }
 
                 if (!params.found) {
                     puts(E_NOREC);
@@ -727,9 +747,9 @@ int main(void)
                     b_update(*id, &offset, &params);
                 } else {
                     // Percorre o arquivo de índice ordenadamente, chamando a função
-                    // `b_update` para cada um dos registros válidos (não removidos)
-                    // encontrados, a função `b_update` irá testar se o registro passa
-                    // no filtro antes de fazer a atualização
+                    // `b_update` para cada uma das chaves encontrados, a função
+                    // `b_update` irá ler o registro correspondente e testar se o
+                    // registro passa no filtro antes de fazer a atualização
                     b_tree_traverse(index, b_update, &params);
                 }
 
