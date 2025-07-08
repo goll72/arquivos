@@ -240,7 +240,7 @@ bool check_child_references(FILE *f, size_t size, size_t page_size, bool use_col
         }
 
         if (!refs[i]) {
-            fprintf(stdout, "%sx%s non-empty page rrn=%x has 0 references\n",
+            fprintf(stdout, "%sx%s non-empty page rrn=%x has 0 references (ignore this if root is a leaf)\n",
                     use_color ? colors[COLOR_RED] : "", use_color ? colors[COLOR_NONE] : "", i);
 
             free(refs);
@@ -427,8 +427,6 @@ int main(int argc, char **argv)
     } while (print_data(f, data, COUNTOF(data), page_size, use_color));
 
     fputc('\n', stdout);
-
-    bool status = true;
 
     for (int i = 0; i < COUNTOF(checks); i++) {
         fseek(f, 0L, SEEK_SET);
