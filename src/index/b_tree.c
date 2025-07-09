@@ -964,12 +964,6 @@ void b_tree_insert(b_tree_index_t *tree, uint32_t key, uint64_t offset)
 
 
 /**
- * IMPORTANT: a seguir, foi implementada a remoção na árvore B (eu sei que não precisava
- * implementar). Se você quiser pular o código da remoção, vá para a linha 1534.
- */
-
-
-/**
  * Guarda parâmetros para a remoção que são os mesmos para todas as instâncias recursivas.
  *
  * - `found` deve ser inicializado com `false`;
@@ -985,7 +979,7 @@ typedef struct {
 /**
  * Remove o subnó com índice `index` do nó contido na página `page`, deslocando os demais
  * subnós para a esquerda e atualizando o tamanho. Preserva o filho direito do subnó que
- * antes de `index` (se `index == 0`, preserva o filho esquerdo desse subnó).
+ * vem antes de `index` (se `index == 0`, preserva o filho esquerdo desse subnó).
  */
 static void b_tree_shift_remove_subnode(b_tree_page_t *page, uint32_t index)
 {
