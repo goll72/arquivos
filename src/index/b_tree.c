@@ -1290,12 +1290,12 @@ enum del_status {
  * último filho; nesse caso, poderá corresponder ao filho direito.
  *
  * Se possível, remove diretamente, realizando apenas um deslocamento, retornando `REMOVED_DIRECT`.
- * Senão, tenta realizar uma redistribuição entre `page` e a página irmã à direita, retornando
- * `REMOVED_REDIST`, ou concatenação, retornando `REMOVED_CONCAT_R`. Se não houver página irmã à
- * direita, faz uma concatenação com a página da esquerda, retornando `REMOVED_CONCAT_L`.
+ * Senão, tenta realizar uma redistribuição entre `page` e a página irmã à direita, ou concatenação,
+ * se não for possível redistribuir (usa a página da esquerda se não houver página à direita),
+ * retornando `REMOVED_REDIST` e `REMOVED_CONCAT`, respectivamente.
  *
- * Nos casos em que houver concatenação, é necessário remover o nó "despromovido"/"rebaixado"
- * de `parent`.
+ * Nos casos em que houver concatenação, é necessário remover o subnó "despromovido"/"rebaixado"
+ * de `parent` (o subnó em `parent_search_index`).
  */
 static enum del_status b_tree_perform_remove(b_tree_index_t *const tree, int32_t page_rrn,
                                              b_tree_page_t *page, uint32_t del_index,
