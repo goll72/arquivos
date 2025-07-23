@@ -310,6 +310,10 @@ static int b_select(uint32_t key, uint64_t *offset, void *data)
     rec_free_var_data_fields(&rec);
 
     params->found = true;
+
+    if (vset_id(params->filter))
+        return B_TRAVERSE_ABORT;
+
     return B_TRAVERSE_CONTINUE;
 }
 
@@ -364,11 +368,12 @@ static int b_update(uint32_t key, uint64_t *offset, void *data)
         // profundidade (DFS) da árvore, de modo que o offset da
         // chave será atualizado por meio do out parameter
         // `offset` ao retornarmos `B_TRAVERSE_UPDATE`.
-        if (vset_id(params->filter))
+        if (vset_id(params->filter)) {
             b_tree_insert(params->index, rec.attack_id, new_offset);
-        else
-            *offset = new_offset;
+            return B_TRAVERSE_UPDATE | B_TRAVERSE_ABORT;
+        }
 
+        *offset = new_offset;
         return B_TRAVERSE_UPDATE;
     }
 
